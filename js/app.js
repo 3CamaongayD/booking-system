@@ -132,6 +132,29 @@
         return div.innerHTML;
     }
 
+    function sendBookingEmail(type, reservation, playerName, playerEmail) {
+        var courtConfig = getCourtConfig(reservation.courtId);
+        var payload = {
+            type: type,
+            data: {
+                confirmationCode: reservation.confirmationCode,
+                playerName: playerName,
+                playerEmail: playerEmail,
+                courtName: courtConfig ? courtConfig.name : 'Court ' + reservation.courtId,
+                sport: reservation.sport || 'pickleball',
+                date: reservation.date,
+                slots: reservation.slots,
+                totalAmount: reservation.totalAmount,
+                paymentMethod: reservation.paymentMethod
+            }
+        };
+        fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(function() {});
+    }
+
     // --- Data Layer ---
     const Data = {
         _get(key) { return JSON.parse(localStorage.getItem(key) || '[]'); },
@@ -1644,6 +1667,8 @@
                     receiptImage: receiptData
                 });
 
+                sendBookingEmail('pending', reservation, name, email);
+
                 State.lastConfirmation = reservation;
                 State.lastConfirmation._playerName = name;
                 State.lastConfirmation._playerEmail = email;
@@ -1732,6 +1757,10 @@
             if (!res) return;
             res.paymentStatus = 'paid';
             Data._set('pkl_reservations', allRes);
+            var player = Data.getPlayer(res.playerId);
+            if (player) {
+                sendBookingEmail('confirmed', res, player.fullName, player.email);
+            }
             UI.toast('Booking approved!', 'success');
             const content = document.getElementById('adminTabContent');
             if (content) renderAdminBookings(content);
