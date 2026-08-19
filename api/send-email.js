@@ -2,6 +2,7 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Kepler Insight Booking <booking@keplerinsightschool.com>';
+const ADMIN_EMAILS = ['booking@keplerinsightschool.com', 'docamaongay9@gmail.com'];
 
 const COURT_RULES = [
   { icon: '🚭', title: 'No Smoking', desc: 'Smoking and vaping are strictly prohibited in all court areas and facilities.' },
@@ -151,6 +152,43 @@ function confirmedEmailHtml(data) {
   `;
 }
 
+function adminNotifyHtml(data) {
+  const slots = data.slots.sort((a, b) => a.hour - b.hour);
+  const timeRange = `${formatHour(slots[0].hour)} – ${formatHour(slots[slots.length - 1].hour + 1)}`;
+  const sport = data.sport === 'table-tennis' ? 'Table Tennis' :
+    data.sport ? data.sport.charAt(0).toUpperCase() + data.sport.slice(1) : '';
+  const facility = data.courtName + (sport && sport !== 'Pickleball' ? ` (${sport})` : '');
+
+  return `
+    <!DOCTYPE html>
+    <html><head><style>${baseStyles()}</style></head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Kepler Insight</h1>
+          <p>Admin Notification — New Booking</p>
+        </div>
+        <div class="content">
+          <div style="text-align:center;">
+            <span class="status-badge status-pending">🔔 New Booking Received</span>
+            <h2 style="font-size:20px; margin:12px 0 4px;">Approval Needed</h2>
+            <p style="color:#666; font-size:14px; margin:0 0 20px;">A new booking has been submitted and requires your verification.</p>
+          </div>
+          ${bookingDetailsHtml(data)}
+          <div style="background:#1a3c34; border-radius:8px; padding:16px; margin:16px 0; font-size:14px; color:#ffffff; text-align:center;">
+            <strong>Action Required</strong><br>
+            Log in to the admin panel to review the payment receipt and approve or reject this booking.
+          </div>
+        </div>
+        <div class="footer">
+          <p>&copy; 2026 Kepler Insight School of Science and Arts</p>
+          <p>Sports Court Reservation System</p>
+        </div>
+      </div>
+    </body></html>
+  `;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -189,6 +227,15 @@ module.exports = async (req, res) => {
       subject,
       html,
     });
+
+    if (type === 'pending') {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: ADMIN_EMAILS,
+        subject: `[Action Required] New Booking — ${data.confirmationCode} | ${data.playerName}`,
+        html: adminNotifyHtml(data),
+      }).catch(err => console.error('Admin notify error:', err));
+    }
 
     return res.status(200).json({ success: true, id: result.data?.id });
   } catch (error) {
