@@ -28,13 +28,13 @@ function baseStyles() {
   return `
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f0eb; margin: 0; padding: 0; }
     .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-    .header { background: linear-gradient(135deg, #1a3c34 0%, #2d5a4e 100%); padding: 32px 24px; text-align: center; }
+    .header { background: linear-gradient(135deg, #991A20 0%, #CC2229 100%); padding: 32px 24px; text-align: center; }
     .header img { height: 48px; margin-bottom: 8px; }
     .header h1 { color: #ffffff; font-size: 22px; margin: 0; font-weight: 700; }
     .header p { color: rgba(255,255,255,0.8); font-size: 13px; margin: 4px 0 0; }
     .status-badge { display: inline-block; padding: 6px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; margin: 16px 0 8px; }
     .status-pending { background: #f5f0eb; color: #8b7355; border: 1px solid #d4c5b0; }
-    .status-confirmed { background: #1a3c34; color: #ffffff; }
+    .status-confirmed { background: #CC2229; color: #ffffff; }
     .content { padding: 24px; }
     .details-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
     .details-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #f0ece7; }
@@ -48,7 +48,7 @@ function baseStyles() {
     .rule strong { display: block; color: #333; margin-bottom: 2px; }
     .rule p { color: #666; margin: 0; }
     .footer { background: #f5f0eb; padding: 20px 24px; text-align: center; font-size: 12px; color: #999; }
-    .conf-code { font-family: monospace; font-size: 20px; font-weight: 700; color: #1a3c34; background: #f5f0eb; padding: 8px 16px; border-radius: 6px; display: inline-block; letter-spacing: 2px; }
+    .conf-code { font-family: monospace; font-size: 20px; font-weight: 700; color: #991A20; background: #f5f0eb; padding: 8px 16px; border-radius: 6px; display: inline-block; letter-spacing: 2px; }
   `;
 }
 
@@ -138,7 +138,7 @@ function confirmedEmailHtml(data) {
           </div>
           ${bookingDetailsHtml(data)}
           ${rulesHtml()}
-          <div style="background:#1a3c34; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#ffffff; text-align:center;">
+          <div style="background:#991A20; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#ffffff; text-align:center;">
             <strong>You're all set!</strong><br>
             Please arrive 5 minutes before your reserved time. Present your confirmation code at the venue.
           </div>
@@ -175,7 +175,7 @@ function adminNotifyHtml(data) {
             <p style="color:#666; font-size:14px; margin:0 0 20px;">A new booking has been submitted and requires your verification.</p>
           </div>
           ${bookingDetailsHtml(data)}
-          <div style="background:#1a3c34; border-radius:8px; padding:16px; margin:16px 0; font-size:14px; color:#ffffff; text-align:center;">
+          <div style="background:#991A20; border-radius:8px; padding:16px; margin:16px 0; font-size:14px; color:#ffffff; text-align:center;">
             <strong>Action Required</strong><br>
             Log in to the admin panel to review the payment receipt and approve or reject this booking.
           </div>
