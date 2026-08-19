@@ -1255,7 +1255,7 @@
                       + '<button class="btn btn-danger btn-sm" onclick="window.PKL.rejectBooking(\'' + r.id + '\')" style="margin-left:4px;">Reject</button> '
                       + (r.receiptImage ? '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')" style="margin-left:4px;">Receipt</button>' : '')
                     : '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')">View</button>'
-                ) + '</td>' +
+                ) + ' <button class="btn btn-outline btn-sm" onclick="window.PKL.deleteBooking(\'' + r.id + '\')" style="margin-left:4px;color:var(--gray-400);">Delete</button></td>' +
             '</tr>';
         }
 
@@ -1772,8 +1772,21 @@
             if (!res) return;
             res.paymentStatus = 'rejected';
             Data._set('pkl_reservations', allRes);
+            var player = Data.getPlayer(res.playerId);
+            if (player) {
+                sendBookingEmail('rejected', res, player.fullName, player.email);
+            }
             UI.toast('Booking rejected', 'info');
             const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        deleteBooking(id) {
+            if (!confirm('Are you sure you want to delete this booking? This cannot be undone.')) return;
+            var allRes = Data.getReservations().filter(function(r) { return r.id !== id; });
+            Data._set('pkl_reservations', allRes);
+            UI.toast('Booking deleted', 'info');
+            var content = document.getElementById('adminTabContent');
             if (content) renderAdminBookings(content);
         },
 

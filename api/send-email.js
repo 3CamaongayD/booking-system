@@ -189,6 +189,37 @@ function adminNotifyHtml(data) {
   `;
 }
 
+function rejectedEmailHtml(data) {
+  return `
+    <!DOCTYPE html>
+    <html><head><style>${baseStyles()}</style></head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Kepler Insight</h1>
+          <p>School of Science and Arts — Sports Court Reservation</p>
+        </div>
+        <div class="content">
+          <div style="text-align:center;">
+            <span class="status-badge" style="background:#f5e6e6; color:#8b2020; border:1px solid #d4a0a0;">❌ Rejected</span>
+            <h2 style="font-size:20px; margin:12px 0 4px;">Booking Not Approved</h2>
+            <p style="color:#666; font-size:14px; margin:0 0 20px;">Unfortunately, your reservation could not be verified. Please see the details below.</p>
+          </div>
+          ${bookingDetailsHtml(data)}
+          <div style="background:#f5f0eb; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#5a4a3a;">
+            <strong>What can you do?</strong><br>
+            This may be due to an issue with your payment receipt. Please ensure your receipt is clear and matches the booking amount, then try booking again or contact the admin for assistance.
+          </div>
+        </div>
+        <div class="footer">
+          <p>&copy; 2026 Kepler Insight School of Science and Arts</p>
+          <p>Sports Court Reservation System</p>
+        </div>
+      </div>
+    </body></html>
+  `;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -217,6 +248,9 @@ module.exports = async (req, res) => {
     } else if (type === 'confirmed') {
       subject = `Booking Confirmed — ${data.confirmationCode} | Kepler Insight`;
       html = confirmedEmailHtml(data);
+    } else if (type === 'rejected') {
+      subject = `Booking Not Approved — ${data.confirmationCode} | Kepler Insight`;
+      html = rejectedEmailHtml(data);
     } else {
       return res.status(400).json({ error: 'Invalid email type' });
     }
