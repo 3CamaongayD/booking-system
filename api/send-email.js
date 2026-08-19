@@ -32,22 +32,22 @@ function baseStyles() {
     .header h1 { color: #ffffff; font-size: 22px; margin: 0; font-weight: 700; }
     .header p { color: rgba(255,255,255,0.8); font-size: 13px; margin: 4px 0 0; }
     .status-badge { display: inline-block; padding: 6px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; margin: 16px 0 8px; }
-    .status-pending { background: #fff3cd; color: #856404; }
-    .status-confirmed { background: #d4edda; color: #155724; }
+    .status-pending { background: #f5f0eb; color: #8b7355; border: 1px solid #d4c5b0; }
+    .status-confirmed { background: #1a3c34; color: #ffffff; }
     .content { padding: 24px; }
     .details-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
     .details-table td { padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #f0ece7; }
     .details-table td:first-child { color: #888; font-weight: 500; width: 140px; }
     .details-table td:last-child { color: #333; font-weight: 600; }
     .amount { color: #dc143c !important; font-size: 18px !important; }
-    .rules-section { background: #fafaf7; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .rules-section { background: #f5f0eb; border-radius: 8px; padding: 20px; margin: 20px 0; }
     .rules-section h3 { font-size: 16px; margin: 0 0 16px; color: #333; }
     .rule { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; font-size: 13px; }
     .rule-icon { font-size: 18px; flex-shrink: 0; }
     .rule strong { display: block; color: #333; margin-bottom: 2px; }
     .rule p { color: #666; margin: 0; }
     .footer { background: #f5f0eb; padding: 20px 24px; text-align: center; font-size: 12px; color: #999; }
-    .conf-code { font-family: monospace; font-size: 20px; font-weight: 700; color: #1a3c34; background: #e8f5e9; padding: 8px 16px; border-radius: 6px; display: inline-block; letter-spacing: 2px; }
+    .conf-code { font-family: monospace; font-size: 20px; font-weight: 700; color: #1a3c34; background: #f5f0eb; padding: 8px 16px; border-radius: 6px; display: inline-block; letter-spacing: 2px; }
   `;
 }
 
@@ -105,7 +105,7 @@ function pendingEmailHtml(data) {
             <p style="color:#666; font-size:14px; margin:0 0 20px;">Your reservation has been received and is awaiting admin verification.</p>
           </div>
           ${bookingDetailsHtml(data)}
-          <div style="background:#fff8e1; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#7a6100;">
+          <div style="background:#f5f0eb; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#5a4a3a;">
             <strong>What happens next?</strong><br>
             Our admin will review your payment receipt and verify your booking. You will receive a confirmation email once approved.
           </div>
@@ -137,7 +137,7 @@ function confirmedEmailHtml(data) {
           </div>
           ${bookingDetailsHtml(data)}
           ${rulesHtml()}
-          <div style="background:#e8f5e9; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#2e7d32; text-align:center;">
+          <div style="background:#1a3c34; border-radius:8px; padding:16px; margin:16px 0; font-size:13px; color:#ffffff; text-align:center;">
             <strong>You're all set!</strong><br>
             Please arrive 5 minutes before your reserved time. Present your confirmation code at the venue.
           </div>
