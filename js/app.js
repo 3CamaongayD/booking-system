@@ -1,0 +1,1921 @@
+// ==========================================
+// KEPLER INSIGHT PICKLEBALL RESERVATION SYSTEM
+// ==========================================
+
+(function () {
+    'use strict';
+
+    // --- Configuration ---
+    const CONFIG = {
+        courts: [
+            { id: 1, name: 'Court 1', type: 'pickleball', label: 'Pickleball' },
+            { id: 2, name: 'Court 2', type: 'pickleball', label: 'Pickleball' },
+            { id: 3, name: 'Court 3', type: 'dual', label: 'Pickleball / Badminton', sports: ['pickleball', 'badminton'] },
+            { id: 4, name: 'Table 1', type: 'table-tennis', label: 'Table Tennis' },
+            { id: 5, name: 'Table 2', type: 'table-tennis', label: 'Table Tennis' }
+        ],
+        schedule: {
+            weekday: { start: 18, end: 22 },
+            weekend: { start: 13, end: 22 }
+        },
+        rates: {
+            offPeak: 200,
+            peak: 320,
+            peakStart: 18,
+            badmintonPeak: 280,
+            badmintonOffPeak: 200,
+            tableTennisPeak: 200,
+            tableTennisOffPeak: 120
+        },
+        adminPassword: 'RelpicKle2026!'
+    };
+
+    // --- State ---
+    const State = {
+        currentPlayer: JSON.parse(localStorage.getItem('pkl_currentPlayer') || 'null'),
+        booking: { court: null, date: null, slots: [], sport: null },
+        bookingContact: null,
+        homeTab: 'book',
+        bookingDate: todayStr(),
+        weekOffset: 0,
+        calendarMonth: new Date().getMonth(),
+        calendarYear: new Date().getFullYear(),
+        admin: {
+            loggedIn: false,
+            activeTab: 'bookings',
+            scheduleDate: todayStr()
+        }
+    };
+
+    // --- Helpers ---
+    function todayStr() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function genId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    function genConfirmation() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = 'PKL-';
+        for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
+    }
+
+    function formatDate(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function formatHour(h) {
+        if (h === 0 || h === 24) return '12:00 AM';
+        if (h === 12) return '12:00 PM';
+        return h > 12 ? `${h - 12}:00 PM` : `${h}:00 AM`;
+    }
+
+    function formatCurrency(amount) {
+        return '₱' + amount.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+    }
+
+    function isWeekend(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        return d.getDay() === 0 || d.getDay() === 6;
+    }
+
+    function getAvailableHours(dateStr) {
+        const sched = isWeekend(dateStr) ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+        const hours = [];
+        for (let h = sched.start; h < sched.end; h++) hours.push(h);
+        return hours;
+    }
+
+    function getCourtConfig(courtId) {
+        return CONFIG.courts.find(function(c) { return c.id === courtId; });
+    }
+
+    function getCourtName(courtId) {
+        var c = getCourtConfig(courtId);
+        return c ? c.name : 'Court ' + courtId;
+    }
+
+    function formatSport(sport) {
+        if (!sport) return '';
+        if (sport === 'table-tennis') return 'Table Tennis';
+        return sport.charAt(0).toUpperCase() + sport.slice(1);
+    }
+
+    function getRate(hour, courtId, sport) {
+        var court = getCourtConfig(courtId);
+        var isPeak = hour >= CONFIG.rates.peakStart;
+        if (court) {
+            if (court.type === 'table-tennis') return isPeak ? CONFIG.rates.tableTennisPeak : CONFIG.rates.tableTennisOffPeak;
+            if (sport === 'badminton') return isPeak ? CONFIG.rates.badmintonPeak : CONFIG.rates.badmintonOffPeak;
+        }
+        return isPeak ? CONFIG.rates.peak : CONFIG.rates.offPeak;
+    }
+
+    function getDiscount(slotCount) {
+        if (slotCount >= 4) return 0.05;
+        if (slotCount >= 3) return 0.03;
+        return 0;
+    }
+
+    function getRateLabel(hour, courtId, sport) {
+        return hour < CONFIG.rates.peakStart ? 'Off-Peak' : 'Peak';
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // --- Data Layer ---
+    const Data = {
+        _get(key) { return JSON.parse(localStorage.getItem(key) || '[]'); },
+        _set(key, val) {
+            try {
+                localStorage.setItem(key, JSON.stringify(val));
+            } catch (e) {
+                UI.toast('Storage is full. Please contact admin to clear old data.', 'error');
+                throw e;
+            }
+        },
+
+        getPlayers() { return this._get('pkl_players'); },
+        addPlayer(p) {
+            const players = this.getPlayers();
+            p.id = genId();
+            p.createdAt = new Date().toISOString();
+            players.push(p);
+            this._set('pkl_players', players);
+            return p;
+        },
+        getPlayer(id) { return this.getPlayers().find(p => p.id === id); },
+        getPlayerByEmail(email) {
+            return this.getPlayers().find(p => p.email.toLowerCase() === email.toLowerCase());
+        },
+        updatePlayer(id, data) {
+            const players = this.getPlayers();
+            const idx = players.findIndex(p => p.id === id);
+            if (idx >= 0) { Object.assign(players[idx], data); this._set('pkl_players', players); }
+        },
+
+        getReservations() { return this._get('pkl_reservations'); },
+        addReservation(r) {
+            const reservations = this.getReservations();
+            r.id = genId();
+            r.confirmationCode = genConfirmation();
+            r.createdAt = new Date().toISOString();
+            reservations.push(r);
+            this._set('pkl_reservations', reservations);
+            return r;
+        },
+        getReservationsByPlayer(playerId) {
+            return this.getReservations().filter(r => r.playerId === playerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        },
+        getReservationsByDate(date) {
+            return this.getReservations().filter(r => r.date === date && r.paymentStatus !== 'cancelled');
+        },
+        getReservationsByCourtAndDate(courtId, date) {
+            return this.getReservations().filter(r => r.courtId === courtId && r.date === date && r.paymentStatus !== 'cancelled' && r.paymentStatus !== 'rejected');
+        },
+        cancelReservation(id) {
+            const reservations = this.getReservations();
+            const idx = reservations.findIndex(r => r.id === id);
+            if (idx >= 0) { reservations[idx].paymentStatus = 'cancelled'; this._set('pkl_reservations', reservations); }
+        },
+        isSlotBooked(courtId, date, hour) {
+            return this.getReservationsByCourtAndDate(courtId, date)
+                .some(r => r.slots.some(s => s.hour === hour));
+        },
+
+        getOverrides() { return this._get('pkl_overrides'); },
+        addOverride(o) {
+            const overrides = this.getOverrides();
+            o.id = genId();
+            o.createdAt = new Date().toISOString();
+            overrides.push(o);
+            this._set('pkl_overrides', overrides);
+            return o;
+        },
+        removeOverride(id) {
+            const overrides = this.getOverrides().filter(o => o.id !== id);
+            this._set('pkl_overrides', overrides);
+        },
+        isSlotBlocked(courtId, date, hour) {
+            return this.getOverrides().find(o => o.courtId === courtId && o.date === date && o.hour === hour) || false;
+        },
+
+        isSlotAvailable(courtId, date, hour) {
+            return !this.isSlotBooked(courtId, date, hour) && !this.isSlotBlocked(courtId, date, hour);
+        },
+
+        getAllReservationsInRange(startDate, endDate) {
+            return this.getReservations().filter(r =>
+                r.date >= startDate && r.date <= endDate && r.paymentStatus !== 'cancelled'
+            );
+        }
+    };
+
+    // --- UI Utilities ---
+    const UI = {
+        toast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icons = { success: '✓', error: '✗', info: 'ℹ', warning: '⚠' };
+            toast.innerHTML = `<span style="font-size:18px">${icons[type] || ''}</span> <span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'toastOut 0.3s ease forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        },
+
+        showModal(title, bodyHtml, footerHtml) {
+            const overlay = document.getElementById('modal-overlay');
+            const content = document.getElementById('modal-content');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <h3>${escapeHtml(title)}</h3>
+                    <button class="modal-close" onclick="document.getElementById('modal-overlay').classList.add('hidden')">&times;</button>
+                </div>
+                <div class="modal-body">${bodyHtml}</div>
+                ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
+            `;
+            overlay.classList.remove('hidden');
+            overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.add('hidden'); };
+        },
+
+        closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+        },
+
+        showProcessing(message) {
+            const el = document.createElement('div');
+            el.id = 'processing';
+            el.className = 'processing-overlay';
+            el.innerHTML = `<div class="spinner"></div><p>${escapeHtml(message)}</p>`;
+            document.body.appendChild(el);
+        },
+
+        hideProcessing() {
+            const el = document.getElementById('processing');
+            if (el) el.remove();
+        }
+    };
+
+    // --- Router ---
+    function handleRoute() {
+        const hash = location.hash.slice(1) || 'home';
+        const [page] = hash.split('/');
+
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.toggle('active', link.dataset.page === page);
+        });
+
+        const navLinks = document.getElementById('navLinks');
+        if (navLinks.classList.contains('open')) navLinks.classList.remove('open');
+
+        const app = document.getElementById('app');
+        const renderers = {
+            home: renderHome,
+            book: renderHome,
+            dashboard: renderDashboard,
+            checkout: renderCheckout,
+            faq: renderFAQ,
+            admin: renderAdmin,
+            confirmation: renderConfirmation
+        };
+
+        const renderer = renderers[page] || renderHome;
+        app.innerHTML = '';
+        renderer(app);
+        window.scrollTo(0, 0);
+    }
+
+    // --- HOME / VENUE PAGE ---
+    function renderHome(container) {
+        var today = new Date();
+        var isWknd = today.getDay() === 0 || today.getDay() === 6;
+        var schedNow = isWknd ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+        var tab = State.homeTab || 'book';
+
+        var html = '<div class="hero">' +
+            '<h1>Ready to <span>Serve, Smash, or Rally?</span>' +
+            '<span class="hero-sub">welcome to <strong>Kepler Insight School</strong>!</span></h1>' +
+            '<p>Book your pickleball court, badminton court, or table tennis table online instantly and get ready to play!</p>' +
+        '</div>';
+
+        html += '<div class="venue-header" style="margin-top:20px;">' +
+            '<div class="venue-stats-row" style="border-top:none;padding-top:0;">' +
+                '<div class="venue-stat"><div class="venue-stat-icon">&#127934;</div><div><strong>5</strong><br><small>Facilities</small></div></div>' +
+                '<div class="venue-stat"><div class="venue-stat-icon">&#128347;</div><div><small>open</small><br><strong>' + formatHour(schedNow.start) + '-' + formatHour(schedNow.end) + '</strong></div></div>' +
+                '<div class="venue-stat"><div class="venue-stat-icon">&#128197;</div><div><small>Today\'s</small><br><strong>Bookings</strong></div></div>' +
+            '</div>' +
+        '</div>';
+
+        html += '<div class="venue-tabs">' +
+            '<button class="venue-tab ' + (tab === 'book' ? 'active' : '') + '" onclick="window.PKL.homeTab(\'book\')">Book</button>' +
+            '<button class="venue-tab ' + (tab === 'about' ? 'active' : '') + '" onclick="window.PKL.homeTab(\'about\')">About</button>' +
+            '<button class="venue-tab ' + (tab === 'photos' ? 'active' : '') + '" onclick="window.PKL.homeTab(\'photos\')">Photos</button>' +
+        '</div>' +
+        '<div id="homeTabContent"></div>';
+
+        container.innerHTML = html;
+
+        var content = document.getElementById('homeTabContent');
+        if (tab === 'book') renderBookTab(content);
+        else if (tab === 'about') renderAboutTab(content);
+        else if (tab === 'photos') renderPhotosTab(content);
+    }
+
+    function renderBookTab(content) {
+        var dateStr = State.bookingDate || todayStr();
+        var hours = getAvailableHours(dateStr);
+        var booking = State.booking;
+        var html = '';
+
+        var dateLabel = dateStr === todayStr() ? 'Today, ' + formatDate(dateStr) : formatDate(dateStr);
+        html += '<div class="book-date-nav">';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(-1)">&#9664;</button>';
+        html += '<div class="book-date-label">&#128197; ' + dateLabel + '</div>';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(1)">&#9654;</button>';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateReset()" title="Go to today">&#8634;</button>';
+        html += '</div>';
+
+        html += '<p class="book-instruction">Tap a slot to select it, or drag down the column to take several hours in a row.</p>';
+
+        html += '<div class="grid-legend">';
+        html += '<span><span class="gl-dot gl-free"></span> Free</span>';
+        html += '<span><span class="gl-dot gl-selected"></span> Your Selection</span>';
+        html += '<span><span class="gl-dot gl-taken"></span> Taken</span>';
+        html += '<span><span class="gl-dot gl-pending"></span> Awaiting Payment</span>';
+        html += '<span><span class="gl-dot gl-blocked"></span> Reserved by Venue</span>';
+        html += '</div>';
+
+        var gridCols = [];
+        CONFIG.courts.forEach(function(c) {
+            if (c.type === 'dual') {
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: 'Pickleball', rate: '&#8369;200-320/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;200-280/hr' });
+            } else if (c.type === 'table-tennis') {
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'table-tennis', label: c.label, rate: '&#8369;120-200/hr' });
+            } else {
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: c.label, rate: '&#8369;200-320/hr' });
+            }
+        });
+
+        html += '<div class="book-grid-wrapper"><table class="book-grid">';
+        html += '<thead><tr><th class="bg-time-header">Time</th>';
+        gridCols.forEach(function(col) {
+            html += '<th class="bg-court-header"><strong>' + col.name + '</strong><small>' + col.label + '</small><small class="bg-rate">' + col.rate + '</small></th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        if (hours.length === 0) {
+            html += '<tr><td colspan="' + (gridCols.length + 1) + '" class="bg-empty">No operating hours for this date</td></tr>';
+        }
+
+        var nowHour = new Date().getHours();
+        var isToday = dateStr === todayStr();
+        hours.forEach(function(h) {
+            html += '<tr><td class="bg-time-cell">' + formatHour(h) + '-' + formatHour(h + 1) + '</td>';
+            gridCols.forEach(function(col) {
+                var isPast = isToday && h < nowHour;
+                var booked = Data.isSlotBooked(col.courtId, dateStr, h);
+                var blocked = Data.isSlotBlocked(col.courtId, dateStr, h);
+                var isSelected = booking.court === col.courtId && booking.sport === col.sport && booking.date === dateStr && booking.slots.indexOf(h) >= 0;
+                var isPending = false;
+                if (booked) {
+                    var res = Data.getReservationsByCourtAndDate(col.courtId, dateStr).find(function(r) {
+                        return r.slots.some(function(s) { return s.hour === h; });
+                    });
+                    if (res && res.paymentStatus === 'pending') isPending = true;
+                }
+                var cls = 'bg-cell';
+                var cellContent = '';
+                var clickable = false;
+                if (isPast) {
+                    cls += ' bg-past';
+                    cellContent = '-';
+                } else if (blocked) {
+                    cls += ' bg-blocked';
+                    cellContent = escapeHtml(blocked.reason || 'Blocked');
+                } else if (booked) {
+                    cls += isPending ? ' bg-pending' : ' bg-taken';
+                    cellContent = isPending ? 'Awaiting Payment' : 'Booked';
+                } else if (isSelected) {
+                    cls += ' bg-selected';
+                    cellContent = '&#8369;' + getRate(h, col.courtId, col.sport);
+                    clickable = true;
+                } else {
+                    cls += ' bg-free';
+                    cellContent = '&#8369;' + getRate(h, col.courtId, col.sport);
+                    clickable = true;
+                }
+                html += '<td class="' + cls + '"' + (clickable ? ' onclick="window.PKL.gridSelectSlot(' + col.courtId + ',' + h + ',\'' + col.sport + '\')"' : '') + '>' + cellContent + '</td>';
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+
+        if (booking.court && booking.date === dateStr && booking.slots.length > 0) {
+            var sortedSlots = booking.slots.slice().sort(function(a, b) { return a - b; });
+            var subtotal = 0;
+            sortedSlots.forEach(function(h) { subtotal += getRate(h, booking.court, booking.sport); });
+            var disc = getDiscount(sortedSlots.length);
+            var discAmt = Math.round(subtotal * disc);
+            var total = subtotal - discAmt;
+            var courtName = getCourtName(booking.court);
+            var sportName = booking.sport ? formatSport(booking.sport) : '';
+
+            html += '<div class="book-summary-bar">';
+            html += '<div class="book-summary-info">';
+            html += '<strong>' + courtName + (sportName ? ' (' + sportName + ')' : '') + '</strong>';
+            html += '<span>' + sortedSlots.length + ' hr' + (sortedSlots.length > 1 ? 's' : '') + ' &bull; ' + formatHour(sortedSlots[0]) + ' - ' + formatHour(sortedSlots[sortedSlots.length - 1] + 1) + '</span>';
+            if (disc > 0) html += '<span class="discount-note">' + Math.round(disc * 100) + '% multi-hour discount</span>';
+            html += '</div>';
+            html += '<div class="book-summary-action">';
+            html += '<span class="book-total">' + formatCurrency(total) + '</span>';
+            html += '<button class="btn btn-primary" onclick="window.PKL.proceedToCheckout()">Book Now</button>';
+            html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.resetBooking();window.PKL.homeTab(\'book\')">Clear</button>';
+            html += '</div></div>';
+        }
+
+        content.innerHTML = html;
+    }
+
+    function renderAboutTab(content) {
+        var html = '<div class="about-layout">' +
+            '<div class="about-col">' +
+                '<div class="about-card"><h3>&#128176; Rates</h3>' +
+                    '<h4 style="font-size:11px;letter-spacing:1px;color:var(--gray-400);margin:0 0 10px;">RATE BY FACILITY</h4>' +
+                    '<div class="rate-list">' +
+                        '<div class="rate-row"><span>Court 1 <small>Pickleball</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 2 <small>Pickleball</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 3 <small>PB / Badminton</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Table 1 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Table 2 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
+                    '</div>' +
+                    '<p style="font-size:12px;color:var(--gray-400);margin-top:12px;">Multi-hour discounts: 3% off for 3 hrs, 5% off for 4+ hrs</p>' +
+                '</div>' +
+                '<div class="about-card"><h3>&#128347; Hours of Operation</h3>' +
+                    '<div class="hours-list">' +
+                        '<div class="hour-row"><span>Monday - Friday</span><span>6:00 PM - 10:00 PM</span></div>' +
+                        '<div class="hour-row"><span>Saturday - Sunday</span><span>1:00 PM - 10:00 PM</span></div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="about-col">' +
+                '<div class="about-card"><h3>&#128205; Find Us</h3>' +
+                    '<div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="200" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>' +
+                    '<div class="contact-info"><p>&#128205; Kepler Insight School of Science and Arts, Liloan, Cebu</p>' +
+                    '<a href="https://maps.app.goo.gl/S8fPwLjrYJn6UCsZA" target="_blank" rel="noopener" class="btn btn-outline btn-sm mt-1">&#128204; Directions</a></div>' +
+                '</div>' +
+                '<div class="about-card"><h3>&#127970; Facilities</h3>' +
+                    '<div class="facilities-tags"><span>&#127934; 3 Courts</span><span>&#127955; 2 Table Tennis</span></div>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+        html += '<div class="about-card mt-3"><h3>&#10067; Frequently Asked Questions</h3>' +
+            '<div class="faq-list" style="max-width:100%;">' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I book a court or table?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Select your preferred facility from the Book tab, pick a date, choose your time slots, then proceed to checkout. Enter your details, select a payment method, and confirm your booking.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: Off-Peak &#8369;200/hr, Peak &#8369;320/hr. Badminton: Off-Peak &#8369;200/hr, Peak &#8369;280/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr. Peak hours are 6 PM - 10 PM. Multi-hour discounts: 3% off for 3 hours, 5% off for 4+ hours.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What payment methods are accepted?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>We accept GCash and Maribank. Send payment to the number provided at checkout, then upload your receipt screenshot for verification.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact the school administration directly. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What happens if I arrive late?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time.</p></div></div>' +
+            '</div>' +
+        '</div>';
+
+        html += '<div class="about-card mt-3"><h3>&#9888;&#65039; Court Rules &amp; Guidelines</h3>' +
+            '<div class="rules-grid">' +
+                '<div class="rule-item"><span class="rule-icon">&#128685;</span><div><strong>No Smoking</strong><p>Smoking and vaping are strictly prohibited in all court areas and facilities.</p></div></div>' +
+                '<div class="rule-item"><span class="rule-icon">&#127864;</span><div><strong>No Alcoholic Beverages</strong><p>Alcohol is not allowed on the premises.</p></div></div>' +
+                '<div class="rule-item"><span class="rule-icon">&#128095;</span><div><strong>Proper Footwear Required</strong><p>Players must wear non-marking court shoes. No sandals, slippers, or bare feet.</p></div></div>' +
+                '<div class="rule-item"><span class="rule-icon">&#9200;</span><div><strong>Be On Time</strong><p>Please arrive 5 minutes before your slot. Late arrivals will not extend your booking.</p></div></div>' +
+                '<div class="rule-item"><span class="rule-icon">&#129520;</span><div><strong>Handle Equipment with Care</strong><p>Return all borrowed equipment in good condition. Damages may incur fees.</p></div></div>' +
+                '<div class="rule-item"><span class="rule-icon">&#128686;</span><div><strong>Keep the Courts Clean</strong><p>Dispose of trash properly. Leave the court area clean for the next players.</p></div></div>' +
+            '</div>' +
+        '</div>';
+
+        content.innerHTML = html;
+    }
+
+    function renderPhotosTab(content) {
+        content.innerHTML = '<h3 style="font-size:20px;font-weight:700;margin-bottom:16px;">Photos</h3>' +
+            '<div class="photos-placeholder"><div class="empty-state" style="padding:60px 20px;">' +
+                '<div class="empty-icon">&#128247;</div><h3>Photos Coming Soon</h3><p>Venue photos will be added here.</p>' +
+            '</div></div>' +
+            '<div class="about-card mt-3"><h3>&#9888;&#65039; Court Rules &amp; Guidelines</h3>' +
+                '<div class="rules-grid">' +
+                    '<div class="rule-item"><span class="rule-icon">&#128685;</span><div><strong>No Smoking</strong><p>Smoking and vaping are strictly prohibited in all court areas and facilities.</p></div></div>' +
+                    '<div class="rule-item"><span class="rule-icon">&#127864;</span><div><strong>No Alcoholic Beverages</strong><p>Alcohol is not allowed on the premises.</p></div></div>' +
+                    '<div class="rule-item"><span class="rule-icon">&#128095;</span><div><strong>Proper Footwear Required</strong><p>Players must wear non-marking court shoes. No sandals, slippers, or bare feet.</p></div></div>' +
+                    '<div class="rule-item"><span class="rule-icon">&#9200;</span><div><strong>Be On Time</strong><p>Please arrive 5 minutes before your slot. Late arrivals will not extend your booking.</p></div></div>' +
+                    '<div class="rule-item"><span class="rule-icon">&#129520;</span><div><strong>Handle Equipment with Care</strong><p>Return all borrowed equipment in good condition. Damages may incur fees.</p></div></div>' +
+                    '<div class="rule-item"><span class="rule-icon">&#128686;</span><div><strong>Keep the Courts Clean</strong><p>Dispose of trash properly. Leave the court area clean for the next players.</p></div></div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    // --- BOOKING PAGE ---
+    function renderBooking(container) {
+        const booking = State.booking;
+        let step = 1;
+        if (booking.court) step = 2;
+        if (booking.court && booking.date) step = 3;
+
+        container.innerHTML = `
+            <div class="page-header">
+                <h1>Book a Court</h1>
+                <p>Select your court, date, and time slots</p>
+                <div class="accent-line"></div>
+            </div>
+
+            <div class="booking-steps">
+                <div class="step ${step >= 1 ? (step > 1 ? 'completed' : 'active') : ''}">
+                    <span class="step-number">1</span> Court
+                </div>
+                <div class="step-connector"></div>
+                <div class="step ${step >= 2 ? (step > 2 ? 'completed' : 'active') : ''}">
+                    <span class="step-number">2</span> Date
+                </div>
+                <div class="step-connector"></div>
+                <div class="step ${step >= 3 ? 'active' : ''}">
+                    <span class="step-number">3</span> Time
+                </div>
+            </div>
+
+            <div class="booking-layout">
+                <div class="booking-main" id="bookingMain"></div>
+                <div class="booking-sidebar" id="bookingSidebar"></div>
+            </div>
+        `;
+
+        renderBookingMain();
+        renderBookingSidebar();
+    }
+
+    function renderBookingMain() {
+        const main = document.getElementById('bookingMain');
+        if (!main) return;
+        const booking = State.booking;
+
+        let html = '';
+
+        // Step 1: Facility Selection
+        html += `<div class="card mb-3">
+            <div class="card-header">Select Facility</div>
+            <div class="court-picker">`;
+        CONFIG.courts.forEach(c => {
+            const isSelected = booking.court === c.id;
+            var icon = c.type === 'table-tennis' ? '&#127955;' : '&#127934;';
+            html += `
+                <div class="court-card ${isSelected ? 'selected' : ''}" onclick="window.PKL.selectCourt(${c.id})">
+                    <div class="court-icon">${icon}</div>
+                    <div class="court-name">${c.name}</div>
+                    <div class="court-type-label">${c.label}</div>
+                    <div class="court-status available">Available</div>
+                </div>`;
+        });
+        html += `</div>`;
+
+        if (booking.court) {
+            var selCourt = getCourtConfig(booking.court);
+            if (selCourt && selCourt.type === 'dual') {
+                var curSport = booking.sport || 'pickleball';
+                html += `<div class="sport-selector">
+                    <label style="font-weight:600; font-size:14px; margin-bottom:8px; display:block;">Select Sport for ${selCourt.name}:</label>
+                    <div class="sport-toggle">
+                        <button class="btn ${curSport === 'pickleball' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="window.PKL.selectSport('pickleball')">&#127934; Pickleball</button>
+                        <button class="btn ${curSport === 'badminton' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="window.PKL.selectSport('badminton')">&#127992; Badminton</button>
+                    </div>
+                </div>`;
+            }
+        }
+
+        html += `</div>`;
+
+        // Step 2: Calendar
+        if (booking.court) {
+            html += renderCalendar();
+        }
+
+        // Step 3: Time Slots
+        if (booking.court && booking.date) {
+            html += renderTimeSlots();
+        }
+
+        main.innerHTML = html;
+    }
+
+    function renderCalendar() {
+        const year = State.calendarYear;
+        const month = State.calendarMonth;
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let html = `<div class="card mb-3">
+            <div class="card-header">Select Date</div>
+            <div class="calendar">
+                <div class="calendar-header">
+                    <button class="calendar-nav" onclick="window.PKL.calNav(-1)">&#9664;</button>
+                    <h3>${monthNames[month]} ${year}</h3>
+                    <button class="calendar-nav" onclick="window.PKL.calNav(1)">&#9654;</button>
+                </div>
+                <div class="calendar-days">
+                    ${dayNames.map(d => `<div>${d}</div>`).join('')}
+                </div>
+                <div class="calendar-grid">`;
+
+        for (let i = 0; i < firstDay; i++) {
+            html += `<div class="calendar-date empty"></div>`;
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateObj = new Date(year, month, d);
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const isPast = dateObj < today;
+            const isToday = dateObj.getTime() === today.getTime();
+            const isSelected = State.booking.date === dateStr;
+
+            let classes = 'calendar-date';
+            if (isPast) classes += ' disabled';
+            if (isToday) classes += ' today';
+            if (isSelected) classes += ' selected';
+
+            if (isPast) {
+                html += `<div class="${classes}">${d}</div>`;
+            } else {
+                html += `<button class="${classes}" onclick="window.PKL.selectDate('${dateStr}')">${d}</button>`;
+            }
+        }
+
+        html += `</div></div>`;
+
+        if (State.booking.date) {
+            const weekend = isWeekend(State.booking.date);
+            const sched = weekend ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+            var selCourtCfg = getCourtConfig(State.booking.court);
+            var rateNote = '';
+            if (selCourtCfg && (selCourtCfg.type === 'table-tennis' || State.booking.sport === 'badminton')) {
+                rateNote = ' (Flat rate)';
+            } else {
+                rateNote = weekend ? ' (Off-Peak & Peak rates)' : ' (Peak rate only)';
+            }
+            html += `<div class="date-info">
+                <strong>${formatDate(State.booking.date)}</strong><br>
+                Hours: ${formatHour(sched.start)} – ${formatHour(sched.end)}${rateNote}
+            </div>`;
+        }
+
+        html += `</div>`;
+        return html;
+    }
+
+    function renderTimeSlots() {
+        const { court, date, slots } = State.booking;
+        const hours = getAvailableHours(date);
+
+        let html = `<div class="card">
+            <div class="card-header">Select Time Slots</div>
+            <div class="timeslot-grid">`;
+
+        hours.forEach(h => {
+            const booked = Data.isSlotBooked(court, date, h);
+            const blocked = Data.isSlotBlocked(court, date, h);
+            const selected = slots.includes(h);
+            const rate = getRate(h, court, State.booking.sport);
+            const label = getRateLabel(h, court, State.booking.sport);
+
+            let cls = 'timeslot';
+            let status = '';
+            if (blocked) { cls += ' blocked'; status = 'Blocked'; }
+            else if (booked) { cls += ' booked'; status = 'Booked'; }
+            else if (selected) { cls += ' selected'; status = 'Selected'; }
+
+            const clickable = !booked && !blocked;
+            html += `<div class="${cls}" ${clickable ? `onclick="window.PKL.toggleSlot(${h})"` : ''}>
+                <div class="slot-time">${formatHour(h)} – ${formatHour(h + 1)}</div>
+                <div class="slot-rate"><span class="rate-amount">${formatCurrency(rate)}</span> / ${label}</div>
+                ${status ? `<div class="slot-status">${status}</div>` : ''}
+            </div>`;
+        });
+
+        html += `</div>
+            <div class="timeslot-legend">
+                <span><div class="legend-dot available"></div> Available</span>
+                <span><div class="legend-dot selected-legend"></div> Selected</span>
+                <span><div class="legend-dot booked-legend"></div> Booked</span>
+                <span><div class="legend-dot blocked-legend"></div> Blocked</span>
+            </div>
+        </div>`;
+
+        return html;
+    }
+
+    function renderBookingSidebar() {
+        const sidebar = document.getElementById('bookingSidebar');
+        if (!sidebar) return;
+        const { court, date, slots } = State.booking;
+
+        let html = `<div class="booking-summary">
+            <div class="summary-header"><h3>Booking Summary</h3></div>
+            <div class="summary-body">`;
+
+        if (court) {
+            var courtCfg = getCourtConfig(court);
+            var courtLabel = getCourtName(court);
+            if (State.booking.sport) courtLabel += ' (' + formatSport(State.booking.sport) + ')';
+            html += `<div class="summary-row"><span class="label">Facility</span><span class="value">${courtLabel}</span></div>`;
+        }
+        if (date) {
+            html += `<div class="summary-row"><span class="label">Date</span><span class="value">${formatDate(date)}</span></div>`;
+        }
+        if (slots.length > 0) {
+            const sortedSlots = [...slots].sort((a, b) => a - b);
+            html += `<div class="summary-row"><span class="label">Time</span><span class="value">${formatHour(sortedSlots[0])} – ${formatHour(sortedSlots[sortedSlots.length - 1] + 1)}</span></div>`;
+            html += `<div class="summary-row"><span class="label">Duration</span><span class="value">${slots.length} hour${slots.length > 1 ? 's' : ''}</span></div>`;
+
+            html += `<div class="price-breakdown">`;
+            let subtotal = 0;
+            sortedSlots.forEach(h => {
+                const rate = getRate(h, court, State.booking.sport);
+                subtotal += rate;
+                html += `<div class="breakdown-item">
+                    <span>${formatHour(h)} – ${formatHour(h + 1)} (${getRateLabel(h, court, State.booking.sport)})</span>
+                    <span>${formatCurrency(rate)}</span>
+                </div>`;
+            });
+            const disc = getDiscount(slots.length);
+            if (disc > 0) {
+                const discAmt = Math.round(subtotal * disc);
+                const total = subtotal - discAmt;
+                html += `<div class="breakdown-item" style="color:var(--success)">
+                    <span>Discount (${Math.round(disc * 100)}% — ${slots.length} hrs)</span>
+                    <span>-${formatCurrency(discAmt)}</span>
+                </div>`;
+                html += `<div class="breakdown-total">
+                    <span>Total</span>
+                    <span class="total-amount">${formatCurrency(total)}</span>
+                </div>`;
+            } else {
+                html += `<div class="breakdown-total">
+                    <span>Total</span>
+                    <span class="total-amount">${formatCurrency(subtotal)}</span>
+                </div>`;
+            }
+            html += `</div>`;
+        }
+
+        if (!court) {
+            html += `<div class="empty-state" style="padding:30px 10px"><div class="empty-icon">&#127934;</div><p>Select a court to begin</p></div>`;
+        } else if (!date) {
+            html += `<div class="empty-state" style="padding:30px 10px"><div class="empty-icon">&#128197;</div><p>Select a date</p></div>`;
+        } else if (slots.length === 0) {
+            html += `<div class="empty-state" style="padding:30px 10px"><div class="empty-icon">&#128337;</div><p>Select time slots</p></div>`;
+        }
+
+        html += `</div></div>`;
+
+        if (slots.length > 0) {
+            html += `<button class="btn btn-primary btn-block btn-lg mt-2" onclick="window.PKL.proceedToCheckout()">Proceed to Checkout</button>`;
+            html += `<button class="btn btn-outline btn-block btn-sm mt-1" onclick="window.PKL.resetBooking()">Reset Selection</button>`;
+        }
+
+        sidebar.innerHTML = html;
+    }
+
+    // --- CHECKOUT PAGE ---
+    function renderCheckout(container) {
+        const { court, date, slots } = State.booking;
+        if (!court || !date || slots.length === 0) {
+            location.hash = '#book';
+            return;
+        }
+
+        const sortedSlots = [...slots].sort((a, b) => a - b);
+        let subtotal = 0;
+        sortedSlots.forEach(h => subtotal += getRate(h, court, State.booking.sport));
+        const disc = getDiscount(slots.length);
+        const discAmt = Math.round(subtotal * disc);
+        const total = subtotal - discAmt;
+        const courtDisplayName = getCourtName(court);
+        const sportLabel = State.booking.sport ? ' (' + formatSport(State.booking.sport) + ')' : '';
+
+        container.innerHTML = `
+            <div class="checkout-page">
+                <h1 class="checkout-title">Complete Your Booking</h1>
+                <p class="checkout-subtitle">Review your booking details and enter your information</p>
+
+                <div class="checkout-layout">
+                    <div class="checkout-summary">
+                        <div class="co-summary-card">
+                            <h3>Booking Summary</h3>
+                            <p class="co-venue-name">Kepler Insight School</p>
+                            <p class="co-date">${formatDate(date)}</p>
+                            <div class="co-slot-row">
+                                <div>
+                                    <div class="co-time">${formatHour(sortedSlots[0])} &ndash; ${formatHour(sortedSlots[sortedSlots.length - 1] + 1)}</div>
+                                    <div class="co-court">${courtDisplayName}${sportLabel}</div>
+                                </div>
+                                <div class="co-amount">${formatCurrency(subtotal)}</div>
+                            </div>
+                            ${disc > 0 ? `<div class="co-fee-row"><span>Discount (${Math.round(disc * 100)}% &mdash; ${slots.length} hrs)</span><span style="color:var(--success)">-${formatCurrency(discAmt)}</span></div>` : ''}
+                            <div class="co-total-row"><span>Total</span><span class="co-total-amount">${formatCurrency(total)}</span></div>
+                        </div>
+                    </div>
+
+                    <div class="checkout-form">
+                        <div class="co-form-card">
+                            <h3>Your Information</h3>
+                            <div class="form-group">
+                                <label class="required">Full Name</label>
+                                <input type="text" class="form-control" id="coName" placeholder="Juan Dela Cruz" value="${State.bookingContact ? escapeHtml(State.bookingContact.name) : ''}">
+                            </div>
+                            <div class="form-group">
+                                <label class="required">Email Address</label>
+                                <input type="email" class="form-control" id="coEmail" placeholder="juan@example.com" value="${State.bookingContact ? escapeHtml(State.bookingContact.email) : ''}">
+                            </div>
+                            <div class="form-group">
+                                <label class="required">Phone Number</label>
+                                <input type="tel" class="form-control" id="coPhone" placeholder="+63 912 345 6789" value="${State.bookingContact ? escapeHtml(State.bookingContact.phone) : ''}">
+                            </div>
+                        </div>
+
+                        <div class="co-form-card">
+                            <h3>Payment Method</h3>
+                            <div class="payment-methods" id="paymentMethods">
+                                <div class="payment-method selected" onclick="window.PKL.selectPayment('gcash', this)">
+                                    <div class="pm-icon">&#128241;</div>
+                                    <div class="pm-name">GCash</div>
+                                </div>
+                                <div class="payment-method" onclick="window.PKL.selectPayment('maribank', this)">
+                                    <div class="pm-icon">&#127974;</div>
+                                    <div class="pm-name">Maribank</div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="selectedPayment" value="gcash">
+
+                            <div class="pay-info-box mt-2">
+                                <p><strong>Send ${formatCurrency(total)} to:</strong></p>
+                                <div class="pay-detail">
+                                    <span class="pay-number" id="payNumber">0931 203 2087</span>
+                                    <span class="pay-name" id="payName">Don Melton C. (GCash)</span>
+                                </div>
+                                <p class="pay-note">Send payment to the number above, then upload your receipt screenshot below.</p>
+                            </div>
+
+                            <div class="form-group mt-2">
+                                <label class="required">Upload Payment Receipt</label>
+                                <input type="file" class="form-control" id="receiptUpload" accept="image/*" style="padding:8px;">
+                                <div id="receiptPreview" style="margin-top:8px;"></div>
+                            </div>
+                        </div>
+
+                        <div class="checkout-actions">
+                            <button class="btn btn-outline btn-lg" onclick="location.hash='#home'">&#8592; Back to Venue</button>
+                            <button class="btn btn-primary btn-lg" onclick="window.PKL.processPayment()">Confirm &amp; Pay</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- CONFIRMATION PAGE ---
+    function renderConfirmation(container) {
+        const data = State.lastConfirmation;
+        if (!data) {
+            location.hash = '#home';
+            return;
+        }
+        const sortedSlots = [...data.slots].sort((a, b) => a.hour - b.hour);
+        const playerEmail = data._playerEmail || '';
+        const playerName = data._playerName || '';
+
+        const statusBadge = data.paymentStatus === 'paid'
+            ? '<span class="badge badge-success">Approved</span>'
+            : '<span class="badge badge-warning">Pending Verification</span>';
+
+        container.innerHTML = `
+            <div class="confirmation-container">
+                <div class="confirmation-icon">${data.paymentStatus === 'paid' ? '&#9989;' : '&#9203;'}</div>
+                <h1 style="font-size:26px; margin-bottom:8px;">${data.paymentStatus === 'paid' ? 'Booking Confirmed!' : 'Booking Submitted!'}</h1>
+                <p class="text-muted">${data.paymentStatus === 'paid' ? 'Your court reservation has been approved.' : 'Your booking is pending admin verification. You will be notified once approved.'}</p>
+                <div class="confirmation-code">${data.confirmationCode}</div>
+                ${playerEmail ? `<p style="font-size:13px; color:var(--gray-500); margin-bottom:24px;">Booked under <strong>${escapeHtml(playerEmail)}</strong></p>` : ''}
+
+                <div class="card" style="text-align:left">
+                    <div class="card-header">Reservation Details</div>
+                    ${playerName ? `<div class="summary-row"><span class="label">Booked By</span><span class="value">${escapeHtml(playerName)}</span></div>` : ''}
+                    <div class="summary-row"><span class="label">Facility</span><span class="value">${getCourtName(data.courtId)}${data.sport && data.sport !== 'pickleball' ? ' (' + formatSport(data.sport) + ')' : ''}</span></div>
+                    <div class="summary-row"><span class="label">Date</span><span class="value">${formatDate(data.date)}</span></div>
+                    <div class="summary-row"><span class="label">Time</span><span class="value">${formatHour(sortedSlots[0].hour)} – ${formatHour(sortedSlots[sortedSlots.length - 1].hour + 1)}</span></div>
+                    <div class="summary-row"><span class="label">Duration</span><span class="value">${data.slots.length} hour${data.slots.length > 1 ? 's' : ''}</span></div>
+                    <div class="summary-row"><span class="label">Amount</span><span class="value text-crimson fw-bold">${formatCurrency(data.totalAmount)}</span></div>
+                    <div class="summary-row"><span class="label">Payment</span><span class="value">${data.paymentMethod.toUpperCase()}</span></div>
+                    <div class="summary-row"><span class="label">Status</span><span class="value">${statusBadge}</span></div>
+                </div>
+
+                <div style="margin-top:24px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                    <a href="#book" class="btn btn-primary" onclick="window.PKL.resetBooking()">Book Another Court</a>
+                    <a href="#dashboard" class="btn btn-outline">View My Bookings</a>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- DASHBOARD PAGE ---
+    function renderDashboard(container) {
+        if (!State.currentPlayer) {
+            container.innerHTML = `
+                <div class="page-header">
+                    <h1>My Bookings</h1>
+                    <p>Log in to view your booking history</p>
+                    <div class="accent-line"></div>
+                </div>
+                <div style="max-width:400px; margin:40px auto;">
+                    <div class="card">
+                        <div class="card-header">Player Login</div>
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" class="form-control" id="dashLoginEmail" placeholder="Enter your registered email">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="window.PKL.loginPlayer('dashLoginEmail')">Access My Bookings</button>
+                        <p class="text-center mt-2" style="font-size:13px;"><a href="#register">Register as new player</a></p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const player = State.currentPlayer;
+        const reservations = Data.getReservationsByPlayer(player.id);
+        const active = reservations.filter(r => r.date >= todayStr() && r.paymentStatus !== 'cancelled' && r.paymentStatus !== 'rejected');
+        const past = reservations.filter(r => r.date < todayStr() || r.paymentStatus === 'cancelled' || r.paymentStatus === 'rejected');
+
+        container.innerHTML = `
+            <div class="page-header">
+                <h1>My Bookings</h1>
+                <p>Welcome back, ${escapeHtml(player.fullName)}</p>
+                <div class="accent-line"></div>
+            </div>
+
+            <div class="card mb-3">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h3 style="font-size:18px; margin-bottom:4px;">${escapeHtml(player.fullName)}</h3>
+                        <p class="text-muted" style="font-size:13px;">${escapeHtml(player.email)} &bull; ${escapeHtml(player.contactNumber)}</p>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <a href="#book" class="btn btn-primary btn-sm">Book a Court</a>
+                        <button class="btn btn-outline btn-sm" onclick="window.PKL.logout()">Logout</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-row" style="margin-bottom:24px;">
+                <div class="stat-card">
+                    <div class="stat-value">${active.length}</div>
+                    <div class="stat-label">Active Bookings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${reservations.filter(r => r.paymentStatus === 'paid').length}</div>
+                    <div class="stat-label">Total Bookings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatCurrency(reservations.filter(r => r.paymentStatus === 'paid').reduce((s, r) => s + r.totalAmount, 0))}</div>
+                    <div class="stat-label">Total Spent</div>
+                </div>
+            </div>
+
+            ${active.length > 0 ? `
+                <h3 style="font-size:17px; margin-bottom:12px;">Active Reservations</h3>
+                <div class="table-container card mb-3">
+                    <table>
+                        <thead><tr><th>Code</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                            ${active.map(r => {
+            const ss = [...r.slots].sort((a, b) => a.hour - b.hour);
+            return `<tr>
+                                    <td><code>${r.confirmationCode}</code></td>
+                                    <td>${getCourtName(r.courtId)}</td>
+                                    <td>${formatDate(r.date)}</td>
+                                    <td>${formatHour(ss[0].hour)} - ${formatHour(ss[ss.length - 1].hour + 1)}</td>
+                                    <td>${formatCurrency(r.totalAmount)}</td>
+                                    <td><span class="badge ${r.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}">${r.paymentStatus === 'paid' ? 'Approved' : 'Pending'}</span></td>
+                                    <td><button class="btn btn-danger btn-sm" onclick="window.PKL.cancelBooking('${r.id}')">Cancel</button></td>
+                                </tr>`;
+        }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+
+            ${past.length > 0 ? `
+                <h3 style="font-size:17px; margin-bottom:12px;">Past / Cancelled</h3>
+                <div class="table-container card">
+                    <table>
+                        <thead><tr><th>Code</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Status</th></tr></thead>
+                        <tbody>
+                            ${past.map(r => {
+            const ss = [...r.slots].sort((a, b) => a.hour - b.hour);
+            const badge = r.paymentStatus === 'cancelled' ? 'badge-danger' : 'badge-info';
+            const label = r.paymentStatus === 'cancelled' ? 'Cancelled' : 'Completed';
+            return `<tr>
+                                    <td><code>${r.confirmationCode}</code></td>
+                                    <td>${getCourtName(r.courtId)}</td>
+                                    <td>${formatDate(r.date)}</td>
+                                    <td>${formatHour(ss[0].hour)} - ${formatHour(ss[ss.length - 1].hour + 1)}</td>
+                                    <td>${formatCurrency(r.totalAmount)}</td>
+                                    <td><span class="badge ${badge}">${label}</span></td>
+                                </tr>`;
+        }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
+
+            ${reservations.length === 0 ? `
+                <div class="empty-state card">
+                    <div class="empty-icon">&#128197;</div>
+                    <h3>No Bookings Yet</h3>
+                    <p>You haven't made any reservations. <a href="#book">Book your first court</a>!</p>
+                </div>
+            ` : ''}
+        `;
+    }
+
+    // --- FAQ PAGE ---
+    function renderFAQ(container) {
+        const faqs = [
+            {
+                q: 'How do I book a court or table?',
+                a: 'Click "Book a Court" from the navigation menu. Select your preferred facility (pickleball court, badminton court, or table tennis table), pick a date from the calendar, choose your time slots, then proceed to checkout. Enter your name, contact number, and email, select a payment method, and confirm your booking.'
+            },
+            {
+                q: 'What are the operating hours?',
+                a: 'Monday to Friday: 6:00 PM - 10:00 PM. Saturday and Sunday: 1:00 PM - 10:00 PM. The courts are closed outside these hours.'
+            },
+            {
+                q: 'How much does it cost to play?',
+                a: 'Pickleball: Off-Peak ₱200/hr, Peak ₱320/hr. Badminton: Off-Peak ₱200/hr, Peak ₱280/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr. Peak hours are 6 PM - 10 PM. Multi-hour discounts: 3% off for 3 hours, 5% off for 4+ hours.'
+            },
+            {
+                q: 'Can I book multiple time slots at once?',
+                a: 'Yes! You can select multiple consecutive or non-consecutive time slots in a single booking. The total will be calculated based on the rate for each individual slot.'
+            },
+            {
+                q: 'What payment methods are accepted?',
+                a: 'We accept GCash, Maribank, and debit cards. Online payments are processed securely at checkout.'
+            },
+            {
+                q: 'Can I cancel or reschedule my booking?',
+                a: 'Please contact the school administration directly for cancellations or rescheduling. Booking modifications are subject to availability and may incur fees depending on the notice given.'
+            },
+            {
+                q: 'Is there a dress code?',
+                a: 'Players must wear proper athletic attire and non-marking court shoes. Sandals, slippers, and bare feet are not allowed on the courts for safety reasons.'
+            },
+            {
+                q: 'How do I find the facilities?',
+                a: 'The sports facilities are located at Kepler Insight School of Science and Arts. You can find directions on the map displayed on our home page, or open it directly in Google Maps.'
+            },
+            {
+                q: 'What happens if I arrive late?',
+                a: 'Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time, and your booking will end at the originally scheduled time.'
+            },
+            {
+                q: 'How many players can use one court?',
+                a: 'Each court supports up to 4 players for doubles or 2 players for singles. One booking reserves the entire court for your group.'
+            }
+        ];
+
+        container.innerHTML = `
+            <div class="page-header">
+                <h1>Frequently Asked Questions</h1>
+                <p>Everything you need to know about booking and playing at our courts</p>
+                <div class="accent-line"></div>
+            </div>
+
+            <div class="faq-list">
+                ${faqs.map((item, i) => `
+                    <div class="faq-item" onclick="this.classList.toggle('open')">
+                        <div class="faq-question">
+                            <span>${item.q}</span>
+                            <span class="faq-toggle">+</span>
+                        </div>
+                        <div class="faq-answer">
+                            <p>${item.a}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="faq-cta">
+                <p>Still have questions? Contact the school administration or visit us during operating hours.</p>
+                <a href="#book" class="btn btn-primary">Book a Court Now</a>
+            </div>
+        `;
+    }
+
+    // --- ADMIN PAGE ---
+    function renderAdmin(container) {
+        if (!State.admin.loggedIn) {
+            renderAdminLogin(container);
+            return;
+        }
+        renderAdminPanel(container);
+    }
+
+    function renderAdminLogin(container) {
+        container.innerHTML = `
+            <div class="admin-login">
+                <div class="card text-center">
+                    <img src="img/logo.png" alt="Kepler Insight" class="logo-large">
+                    <h2 style="margin-bottom:4px;">Admin Panel</h2>
+                    <p class="text-muted mb-3" style="font-size:14px;">Enter your admin credentials</p>
+                    <form id="adminLoginForm">
+                        <div class="form-group">
+                            <input type="password" class="form-control" id="adminPass" placeholder="Enter admin password" style="text-align:center;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">Login</button>
+                    </form>
+                    <p class="text-muted mt-2" style="font-size:12px;">Contact administrator for access</p>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('adminLoginForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const pass = document.getElementById('adminPass').value;
+            if (pass === CONFIG.adminPassword) {
+                State.admin.loggedIn = true;
+                UI.toast('Admin access granted', 'success');
+                renderAdmin(container);
+            } else {
+                UI.toast('Incorrect password', 'error');
+            }
+        });
+    }
+
+    function renderAdminPanel(container) {
+        const tab = State.admin.activeTab;
+        container.innerHTML = `
+            <div class="admin-topbar">
+                <div>
+                    <h2>Admin Panel</h2>
+                    <p class="text-muted" style="font-size:13px;">Kepler Insight Sports Facility Management</p>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="window.PKL.adminLogout()">Logout</button>
+            </div>
+
+            <div class="tabs">
+                <button class="tab ${tab === 'bookings' ? 'active' : ''}" onclick="window.PKL.adminTab('bookings')">Bookings</button>
+                <button class="tab ${tab === 'schedule' ? 'active' : ''}" onclick="window.PKL.adminTab('schedule')">Schedule</button>
+                <button class="tab ${tab === 'overrides' ? 'active' : ''}" onclick="window.PKL.adminTab('overrides')">Overrides</button>
+                <button class="tab ${tab === 'players' ? 'active' : ''}" onclick="window.PKL.adminTab('players')">Players</button>
+                <button class="tab ${tab === 'reports' ? 'active' : ''}" onclick="window.PKL.adminTab('reports')">Reports</button>
+            </div>
+
+            <div id="adminTabContent"></div>
+        `;
+
+        const content = document.getElementById('adminTabContent');
+        if (tab === 'bookings') renderAdminBookings(content);
+        else if (tab === 'schedule') renderAdminSchedule(content);
+        else if (tab === 'overrides') renderAdminOverrides(content);
+        else if (tab === 'players') renderAdminPlayers(content);
+        else if (tab === 'reports') renderAdminReports(content);
+    }
+
+    function renderAdminBookings(content) {
+        const allRes = Data.getReservations();
+        const pending = allRes.filter(r => r.paymentStatus === 'pending');
+        const approved = allRes.filter(r => r.paymentStatus === 'paid');
+        const rejected = allRes.filter(r => r.paymentStatus === 'rejected');
+
+        function statusBadge(s) {
+            if (s === 'paid') return '<span class="badge badge-success">Approved</span>';
+            if (s === 'pending') return '<span class="badge badge-warning">Pending</span>';
+            if (s === 'rejected') return '<span class="badge badge-danger">Rejected</span>';
+            if (s === 'cancelled') return '<span class="badge badge-danger">Cancelled</span>';
+            return '<span class="badge badge-info">' + s + '</span>';
+        }
+
+        function bookingRow(r, showActions) {
+            const player = Data.getPlayer(r.playerId);
+            const ss = [...r.slots].sort((a, b) => a.hour - b.hour);
+            return '<tr>' +
+                '<td><code>' + r.confirmationCode + '</code></td>' +
+                '<td>' + (player ? escapeHtml(player.fullName) : 'Unknown') + '</td>' +
+                '<td>' + getCourtName(r.courtId) + '</td>' +
+                '<td>' + formatDate(r.date) + '</td>' +
+                '<td>' + formatHour(ss[0].hour) + ' - ' + formatHour(ss[ss.length - 1].hour + 1) + '</td>' +
+                '<td>' + formatCurrency(r.totalAmount) + '</td>' +
+                '<td>' + r.paymentMethod.toUpperCase() + '</td>' +
+                '<td>' + statusBadge(r.paymentStatus) + '</td>' +
+                '<td>' + (showActions
+                    ? '<button class="btn btn-success btn-sm" onclick="window.PKL.approveBooking(\'' + r.id + '\')">Approve</button> '
+                      + '<button class="btn btn-danger btn-sm" onclick="window.PKL.rejectBooking(\'' + r.id + '\')" style="margin-left:4px;">Reject</button> '
+                      + (r.receiptImage ? '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')" style="margin-left:4px;">Receipt</button>' : '')
+                    : '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')">View</button>'
+                ) + '</td>' +
+            '</tr>';
+        }
+
+        content.innerHTML = `
+            <div class="card mb-3">
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>&#9203; Pending Verification (${pending.length})</span>
+                </div>
+                ${pending.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th>Actions</th></tr></thead>
+                            <tbody>${pending.map(r => bookingRow(r, true)).join('')}</tbody>
+                        </table>
+                    </div>
+                ` : '<p class="text-muted text-center" style="padding:24px; font-size:14px;">No pending bookings</p>'}
+            </div>
+
+            <div class="card">
+                <div class="card-header">All Bookings (${allRes.length})</div>
+                ${allRes.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th></th></tr></thead>
+                            <tbody>${allRes.sort((a, b) => b.createdAt - a.createdAt).map(r => bookingRow(r, r.paymentStatus === 'pending')).join('')}</tbody>
+                        </table>
+                    </div>
+                ` : '<p class="text-muted text-center" style="padding:24px;">No bookings yet</p>'}
+            </div>
+        `;
+    }
+
+    function renderAdminSchedule(content) {
+        const date = State.admin.scheduleDate;
+        const hours = getAvailableHours(date);
+
+        let html = `
+            <div class="card mb-3">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <h3 style="font-size:16px;">${formatDate(date)}</h3>
+                    <input type="date" class="form-control" style="width:auto;" value="${date}" onchange="window.PKL.adminSetDate(this.value)">
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="schedule-grid">
+                    <div class="schedule-header">Time</div>
+                    ${CONFIG.courts.map(c => `<div class="schedule-header">${c.name}</div>`).join('')}
+                    ${hours.map(h => {
+            let row = `<div class="schedule-time">${formatHour(h)}</div>`;
+            CONFIG.courts.forEach(c => {
+                const booked = Data.isSlotBooked(c.id, date, h);
+                const blocked = Data.isSlotBlocked(c.id, date, h);
+                if (blocked) {
+                    row += `<div class="schedule-cell blocked">Blocked</div>`;
+                } else if (booked) {
+                    const res = Data.getReservationsByCourtAndDate(c.id, date).find(r => r.slots.some(s => s.hour === h));
+                    const player = res ? Data.getPlayer(res.playerId) : null;
+                    const name = player ? player.fullName : 'Unknown';
+                    row += `<div class="schedule-cell booked" onclick="window.PKL.adminViewBooking('${res ? res.id : ''}')">${escapeHtml(name)}</div>`;
+                } else {
+                    row += `<div class="schedule-cell available">Available</div>`;
+                }
+            });
+            return row;
+        }).join('')}
+                </div>
+            </div>
+        `;
+
+        if (hours.length === 0) {
+            html += `<div class="empty-state card mt-2"><div class="empty-icon">&#128197;</div><h3>No Operating Hours</h3><p>This day has no scheduled operating hours.</p></div>`;
+        }
+
+        content.innerHTML = html;
+    }
+
+    function renderAdminOverrides(content) {
+        const overrides = Data.getOverrides();
+
+        content.innerHTML = `
+            <div class="card mb-3">
+                <div class="card-header">Block a Time Slot</div>
+                <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px;">Block slots for maintenance, school events, or other reasons.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">Court</label>
+                        <select class="form-control" id="overrideCourt">
+                            ${CONFIG.courts.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="required">Date</label>
+                        <input type="date" class="form-control" id="overrideDate" value="${todayStr()}">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">Hour</label>
+                        <select class="form-control" id="overrideHour">
+                            ${Array.from({ length: 9 }, (_, i) => i + 13).map(h => `<option value="${h}">${formatHour(h)} – ${formatHour(h + 1)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="required">Reason</label>
+                        <input type="text" class="form-control" id="overrideReason" placeholder="e.g. Maintenance">
+                    </div>
+                </div>
+                <button class="btn btn-danger" onclick="window.PKL.addOverride()">Block Slot</button>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Current Overrides</div>
+                ${overrides.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Court</th><th>Date</th><th>Time</th><th>Reason</th><th></th></tr></thead>
+                            <tbody>
+                                ${overrides.map(o => `<tr>
+                                    <td>${getCourtName(o.courtId)}</td>
+                                    <td>${formatDate(o.date)}</td>
+                                    <td>${formatHour(o.hour)} – ${formatHour(o.hour + 1)}</td>
+                                    <td>${escapeHtml(o.reason)}</td>
+                                    <td><button class="btn btn-outline btn-sm" onclick="window.PKL.removeOverride('${o.id}')">Remove</button></td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="empty-state"><div class="empty-icon">&#9989;</div><p>No active overrides</p></div>'}
+            </div>
+        `;
+    }
+
+    function renderAdminPlayers(content) {
+        const players = Data.getPlayers();
+
+        content.innerHTML = `
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                    <div class="card-header" style="margin-bottom:0; padding-bottom:0; border:none;">Player Registry (${players.length})</div>
+                    <input type="text" class="form-control" style="width:250px;" placeholder="Search players..." oninput="window.PKL.filterPlayers(this.value)">
+                </div>
+                ${players.length > 0 ? `
+                    <div class="table-container">
+                        <table id="playersTable">
+                            <thead><tr><th>Name</th><th>Email</th><th>Contact</th><th>Emergency Contact</th><th>Bookings</th><th>Registered</th></tr></thead>
+                            <tbody>
+                                ${players.map(p => {
+            const bookingCount = Data.getReservationsByPlayer(p.id).filter(r => r.paymentStatus === 'paid').length;
+            return `<tr>
+                                        <td><strong>${escapeHtml(p.fullName)}</strong></td>
+                                        <td>${escapeHtml(p.email)}</td>
+                                        <td>${escapeHtml(p.contactNumber)}</td>
+                                        <td>${escapeHtml(p.emergencyContact)}</td>
+                                        <td>${bookingCount}</td>
+                                        <td>${new Date(p.createdAt).toLocaleDateString()}</td>
+                                    </tr>`;
+        }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="empty-state"><div class="empty-icon">&#128101;</div><h3>No Players</h3><p>No players have registered yet.</p></div>'}
+            </div>
+        `;
+    }
+
+    function renderAdminReports(content) {
+        const allRes = Data.getReservations().filter(r => r.paymentStatus === 'paid');
+        const today = todayStr();
+
+        const todayRes = allRes.filter(r => r.date === today);
+        const todayRevenue = todayRes.reduce((s, r) => s + r.totalAmount, 0);
+
+        const now = new Date();
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - now.getDay());
+        const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+        const weekRes = allRes.filter(r => r.date >= weekStartStr && r.date <= today);
+        const weekRevenue = weekRes.reduce((s, r) => s + r.totalAmount, 0);
+
+        const monthStr = today.slice(0, 7);
+        const monthRes = allRes.filter(r => r.date.startsWith(monthStr));
+        const monthRevenue = monthRes.reduce((s, r) => s + r.totalAmount, 0);
+
+        const totalRevenue = allRes.reduce((s, r) => s + r.totalAmount, 0);
+
+        const courtStats = CONFIG.courts.map(c => {
+            const cRes = allRes.filter(r => r.courtId === c.id);
+            return { name: c.name, bookings: cRes.length, revenue: cRes.reduce((s, r) => s + r.totalAmount, 0) };
+        });
+
+        content.innerHTML = `
+            <div class="report-grid">
+                <div class="report-card">
+                    <h4>Today's Revenue</h4>
+                    <div class="report-value crimson">${formatCurrency(todayRevenue)}</div>
+                    <div class="report-sub">${todayRes.length} booking${todayRes.length !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="report-card">
+                    <h4>This Week</h4>
+                    <div class="report-value">${formatCurrency(weekRevenue)}</div>
+                    <div class="report-sub">${weekRes.length} booking${weekRes.length !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="report-card">
+                    <h4>This Month</h4>
+                    <div class="report-value">${formatCurrency(monthRevenue)}</div>
+                    <div class="report-sub">${monthRes.length} booking${monthRes.length !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="report-card">
+                    <h4>All Time Revenue</h4>
+                    <div class="report-value crimson">${formatCurrency(totalRevenue)}</div>
+                    <div class="report-sub">${allRes.length} total booking${allRes.length !== 1 ? 's' : ''}</div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Revenue by Facility</div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Facility</th><th>Total Bookings</th><th>Total Revenue</th></tr></thead>
+                        <tbody>
+                            ${courtStats.map(c => `<tr>
+                                <td><strong>${c.name}</strong></td>
+                                <td>${c.bookings}</td>
+                                <td>${formatCurrency(c.revenue)}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Recent Transactions</div>
+                ${allRes.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Amount</th><th>Payment</th></tr></thead>
+                            <tbody>
+                                ${allRes.slice(0, 20).map(r => {
+            const player = Data.getPlayer(r.playerId);
+            return `<tr>
+                                        <td><code>${r.confirmationCode}</code></td>
+                                        <td>${player ? escapeHtml(player.fullName) : 'Unknown'}</td>
+                                        <td>${getCourtName(r.courtId)}</td>
+                                        <td>${formatDate(r.date)}</td>
+                                        <td>${formatCurrency(r.totalAmount)}</td>
+                                        <td><span class="badge badge-gold">${r.paymentMethod.toUpperCase()}</span></td>
+                                    </tr>`;
+        }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="empty-state"><div class="empty-icon">&#128200;</div><p>No transactions yet</p></div>'}
+            </div>
+        `;
+    }
+
+    // --- Global Actions (exposed to onclick handlers) ---
+    window.PKL = {
+        selectCourt(id) {
+            State.booking.court = id;
+            State.booking.date = null;
+            State.booking.slots = [];
+            var courtCfg = getCourtConfig(id);
+            if (courtCfg && courtCfg.type === 'dual') {
+                State.booking.sport = State.booking.sport || 'pickleball';
+            } else if (courtCfg && courtCfg.type === 'table-tennis') {
+                State.booking.sport = 'table-tennis';
+            } else {
+                State.booking.sport = 'pickleball';
+            }
+            renderBookingMain();
+            renderBookingSidebar();
+        },
+
+        calNav(dir) {
+            State.calendarMonth += dir;
+            if (State.calendarMonth > 11) { State.calendarMonth = 0; State.calendarYear++; }
+            if (State.calendarMonth < 0) { State.calendarMonth = 11; State.calendarYear--; }
+            renderBookingMain();
+        },
+
+        selectDate(dateStr) {
+            State.booking.date = dateStr;
+            State.booking.slots = [];
+            renderBookingMain();
+            renderBookingSidebar();
+        },
+
+        toggleSlot(hour) {
+            const idx = State.booking.slots.indexOf(hour);
+            if (idx >= 0) State.booking.slots.splice(idx, 1);
+            else State.booking.slots.push(hour);
+            renderBookingMain();
+            renderBookingSidebar();
+        },
+
+        resetBooking() {
+            State.booking = { court: null, date: null, slots: [], sport: null };
+        },
+
+        proceedToCheckout() {
+            if (!State.currentPlayer) {
+                UI.toast('Please register or log in first', 'warning');
+            }
+            location.hash = '#checkout';
+        },
+
+        selectPayment(method, el) {
+            document.querySelectorAll('.payment-method').forEach(m => m.classList.remove('selected'));
+            el.classList.add('selected');
+            document.getElementById('selectedPayment').value = method;
+            const payNumber = document.getElementById('payNumber');
+            const payName = document.getElementById('payName');
+            if (payNumber && payName) {
+                if (method === 'gcash') {
+                    payNumber.textContent = '0931 203 2087';
+                    payName.textContent = 'Don Melton C. (GCash)';
+                } else if (method === 'maribank') {
+                    payNumber.textContent = '1073 021 0780';
+                    payName.textContent = 'Don Melton Camaongay (MariBank)';
+                }
+            }
+        },
+
+        processPayment() {
+            const name = document.getElementById('coName').value.trim();
+            const phone = document.getElementById('coPhone').value.trim();
+            const email = document.getElementById('coEmail').value.trim();
+
+            if (!name || !phone || !email) {
+                UI.toast('Please fill in your name, contact number, and email', 'error');
+                return;
+            }
+            if (!/\S+@\S+\.\S+/.test(email)) {
+                UI.toast('Please enter a valid email address', 'error');
+                return;
+            }
+
+            State.bookingContact = { name, phone, email };
+
+            const { court, date, slots } = State.booking;
+            if (!court || !date || slots.length === 0) {
+                UI.toast('Invalid booking', 'error');
+                return;
+            }
+
+            if (date === todayStr()) {
+                var currentHour = new Date().getHours();
+                for (const h of slots) {
+                    if (h < currentHour) {
+                        UI.toast('One or more selected time slots have already passed', 'error');
+                        return;
+                    }
+                }
+            }
+
+            for (const h of slots) {
+                if (!Data.isSlotAvailable(court, date, h)) {
+                    UI.toast(`Slot ${formatHour(h)} is no longer available`, 'error');
+                    return;
+                }
+            }
+
+            var player = Data.getPlayerByEmail(email);
+            if (!player) {
+                player = Data.addPlayer({ fullName: name, contactNumber: phone, email: email, emergencyContact: '' });
+            } else {
+                Data.updatePlayer(player.id, { fullName: name, contactNumber: phone });
+            }
+
+            const paymentMethod = document.getElementById('selectedPayment').value;
+            const receiptInput = document.getElementById('receiptUpload');
+            if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
+                UI.toast('Please upload your payment receipt', 'error');
+                return;
+            }
+            var receiptFile = receiptInput.files[0];
+            if (receiptFile.size > 5 * 1024 * 1024) {
+                UI.toast('Receipt image must be under 5MB', 'error');
+                return;
+            }
+            if (!receiptFile.type.startsWith('image/')) {
+                UI.toast('Please upload an image file', 'error');
+                return;
+            }
+
+            const slotData = slots.map(h => ({ hour: h, rate: getRate(h, court, State.booking.sport) }));
+            const subtotal = slotData.reduce((s, sl) => s + sl.rate, 0);
+            const disc = getDiscount(slots.length);
+            const discAmt = Math.round(subtotal * disc);
+            const total = subtotal - discAmt;
+
+            UI.showProcessing('Submitting booking...');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const receiptData = e.target.result;
+
+                const reservation = Data.addReservation({
+                    playerId: player.id,
+                    courtId: court,
+                    sport: State.booking.sport || 'pickleball',
+                    date: date,
+                    slots: slotData,
+                    totalAmount: total,
+                    paymentStatus: 'pending',
+                    paymentMethod: paymentMethod,
+                    receiptImage: receiptData
+                });
+
+                State.lastConfirmation = reservation;
+                State.lastConfirmation._playerName = name;
+                State.lastConfirmation._playerEmail = email;
+                State.booking = { court: null, date: null, slots: [], sport: null };
+                UI.hideProcessing();
+                UI.toast('Booking submitted! Awaiting admin verification.', 'success');
+                location.hash = '#confirmation';
+            };
+            reader.readAsDataURL(receiptInput.files[0]);
+        },
+
+        loginPlayer(inputId) {
+            const id = inputId || 'loginEmail';
+            const emailEl = document.getElementById(id);
+            if (!emailEl) return;
+            const email = emailEl.value.trim();
+            if (!email) { UI.toast('Please enter your email', 'error'); return; }
+
+            var reservations = Data.getReservations().filter(function(r) {
+                var player = Data.getPlayer(r.playerId);
+                return player && player.email.toLowerCase() === email.toLowerCase();
+            });
+
+            if (reservations.length === 0) {
+                UI.toast('No bookings found for this email', 'error');
+                return;
+            }
+
+            var player = Data.getPlayerByEmail(email);
+            State.currentPlayer = player;
+            localStorage.setItem('pkl_currentPlayer', JSON.stringify(player));
+            UI.toast('Welcome back, ' + player.fullName, 'success');
+            handleRoute();
+        },
+
+        logout() {
+            State.currentPlayer = null;
+            localStorage.removeItem('pkl_currentPlayer');
+            UI.toast('Logged out successfully', 'info');
+            handleRoute();
+        },
+
+        cancelBooking(id) {
+            UI.showModal('Cancel Booking', '<p>Are you sure you want to cancel this reservation? This action cannot be undone.</p>',
+                `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Keep Booking</button>
+                 <button class="btn btn-danger" onclick="window.PKL.confirmCancel('${id}')">Cancel Booking</button>`
+            );
+        },
+
+        confirmCancel(id) {
+            Data.cancelReservation(id);
+            UI.closeModal();
+            UI.toast('Booking cancelled', 'info');
+            handleRoute();
+        },
+
+        closeModal() { UI.closeModal(); },
+
+        // Admin
+        adminLogout() {
+            State.admin.loggedIn = false;
+            handleRoute();
+        },
+
+        adminTab(tab) {
+            State.admin.activeTab = tab;
+            const content = document.getElementById('adminTabContent');
+            if (!content) return;
+            document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === tab));
+            if (tab === 'bookings') renderAdminBookings(content);
+            else if (tab === 'schedule') renderAdminSchedule(content);
+            else if (tab === 'overrides') renderAdminOverrides(content);
+            else if (tab === 'players') renderAdminPlayers(content);
+            else if (tab === 'reports') renderAdminReports(content);
+        },
+
+        adminSetDate(date) {
+            State.admin.scheduleDate = date;
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminSchedule(content);
+        },
+
+        approveBooking(id) {
+            const allRes = Data.getReservations();
+            const res = allRes.find(r => r.id === id);
+            if (!res) return;
+            res.paymentStatus = 'paid';
+            Data._set('pkl_reservations', allRes);
+            UI.toast('Booking approved!', 'success');
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        rejectBooking(id) {
+            const allRes = Data.getReservations();
+            const res = allRes.find(r => r.id === id);
+            if (!res) return;
+            res.paymentStatus = 'rejected';
+            Data._set('pkl_reservations', allRes);
+            UI.toast('Booking rejected', 'info');
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        viewReceipt(id) {
+            const res = Data.getReservations().find(r => r.id === id);
+            if (!res) return;
+            const player = Data.getPlayer(res.playerId);
+            const ss = [...res.slots].sort((a, b) => a.hour - b.hour);
+            let receiptHtml = '';
+            if (res.receiptImage && res.receiptImage.indexOf('data:image/') === 0) {
+                receiptHtml = '<div style="margin-top:12px; text-align:center;"><img src="' + res.receiptImage + '" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--gray-200);" alt="Payment Receipt"></div>';
+            } else {
+                receiptHtml = '<p class="text-muted text-center" style="margin-top:12px;">No receipt uploaded</p>';
+            }
+            const statusBadge = res.paymentStatus === 'paid' ? '<span class="badge badge-success">Approved</span>'
+                : res.paymentStatus === 'pending' ? '<span class="badge badge-warning">Pending</span>'
+                : '<span class="badge badge-danger">Rejected</span>';
+            UI.showModal('Booking Details', `
+                <div class="summary-row"><span class="label">Confirmation</span><span class="value"><code>${res.confirmationCode}</code></span></div>
+                <div class="summary-row"><span class="label">Player</span><span class="value">${player ? escapeHtml(player.fullName) : 'Unknown'}</span></div>
+                <div class="summary-row"><span class="label">Email</span><span class="value">${player ? escapeHtml(player.email) : 'N/A'}</span></div>
+                <div class="summary-row"><span class="label">Facility</span><span class="value">${getCourtName(res.courtId)}${res.sport && res.sport !== 'pickleball' ? ' (' + formatSport(res.sport) + ')' : ''}</span></div>
+                <div class="summary-row"><span class="label">Date</span><span class="value">${formatDate(res.date)}</span></div>
+                <div class="summary-row"><span class="label">Time</span><span class="value">${formatHour(ss[0].hour)} – ${formatHour(ss[ss.length - 1].hour + 1)}</span></div>
+                <div class="summary-row"><span class="label">Amount</span><span class="value">${formatCurrency(res.totalAmount)}</span></div>
+                <div class="summary-row"><span class="label">Payment</span><span class="value">${res.paymentMethod.toUpperCase()}</span></div>
+                <div class="summary-row"><span class="label">Status</span><span class="value">${statusBadge}</span></div>
+                <h4 style="margin-top:16px; font-size:14px; font-weight:700;">Payment Receipt</h4>
+                ${receiptHtml}
+            `, res.paymentStatus === 'pending'
+                ? `<button class="btn btn-success" onclick="window.PKL.approveBooking('${res.id}'); window.PKL.closeModal();">Approve</button>
+                   <button class="btn btn-danger" onclick="window.PKL.rejectBooking('${res.id}'); window.PKL.closeModal();">Reject</button>
+                   <button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
+                : `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
+            );
+        },
+
+        adminViewBooking(id) {
+            const res = Data.getReservations().find(r => r.id === id);
+            if (!res) return;
+            const player = Data.getPlayer(res.playerId);
+            const ss = [...res.slots].sort((a, b) => a.hour - b.hour);
+            UI.showModal('Booking Details', `
+                <div class="summary-row"><span class="label">Confirmation</span><span class="value"><code>${res.confirmationCode}</code></span></div>
+                <div class="summary-row"><span class="label">Player</span><span class="value">${player ? escapeHtml(player.fullName) : 'Unknown'}</span></div>
+                <div class="summary-row"><span class="label">Facility</span><span class="value">${getCourtName(res.courtId)}${res.sport && res.sport !== 'pickleball' ? ' (' + formatSport(res.sport) + ')' : ''}</span></div>
+                <div class="summary-row"><span class="label">Date</span><span class="value">${formatDate(res.date)}</span></div>
+                <div class="summary-row"><span class="label">Time</span><span class="value">${formatHour(ss[0].hour)} – ${formatHour(ss[ss.length - 1].hour + 1)}</span></div>
+                <div class="summary-row"><span class="label">Amount</span><span class="value">${formatCurrency(res.totalAmount)}</span></div>
+                <div class="summary-row"><span class="label">Payment</span><span class="value">${res.paymentMethod.toUpperCase()}</span></div>
+                <div class="summary-row"><span class="label">Status</span><span class="value"><span class="badge ${res.paymentStatus === 'paid' ? 'badge-success' : res.paymentStatus === 'pending' ? 'badge-warning' : 'badge-danger'}">${res.paymentStatus === 'paid' ? 'Approved' : res.paymentStatus === 'pending' ? 'Pending' : res.paymentStatus}</span></span></div>
+            `, `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`);
+        },
+
+        addOverride() {
+            const courtId = parseInt(document.getElementById('overrideCourt').value);
+            const date = document.getElementById('overrideDate').value;
+            const hour = parseInt(document.getElementById('overrideHour').value);
+            const reason = document.getElementById('overrideReason').value.trim();
+
+            if (!date || !reason) { UI.toast('Please fill in all fields', 'error'); return; }
+            if (Data.isSlotBlocked(courtId, date, hour)) { UI.toast('This slot is already blocked', 'warning'); return; }
+
+            Data.addOverride({ courtId, date, hour, reason });
+            UI.toast('Slot blocked successfully', 'success');
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminOverrides(content);
+        },
+
+        removeOverride(id) {
+            Data.removeOverride(id);
+            UI.toast('Override removed', 'info');
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminOverrides(content);
+        },
+
+        filterPlayers(query) {
+            const rows = document.querySelectorAll('#playersTable tbody tr');
+            const q = query.toLowerCase();
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(q) ? '' : 'none';
+            });
+        },
+
+        weekNav(dir) {
+            State.weekOffset += dir;
+            if (State.weekOffset < 0) State.weekOffset = 0;
+            handleRoute();
+        },
+
+        selectSport(sport) {
+            State.booking.sport = sport;
+            State.booking.slots = [];
+            var content = document.getElementById('homeTabContent');
+            if (content) renderBookTab(content);
+        },
+
+        homeTab(tab) {
+            State.homeTab = tab;
+            if (tab === 'book') State.bookingDate = State.bookingDate || todayStr();
+            handleRoute();
+        },
+
+        gridSelectSlot(courtId, hour, sport) {
+            var dateStr = State.bookingDate || todayStr();
+            if (dateStr === todayStr() && hour < new Date().getHours()) {
+                UI.toast('This time slot has already passed', 'error');
+                return;
+            }
+            if (State.booking.court !== courtId || State.booking.date !== dateStr || State.booking.sport !== sport) {
+                State.booking.court = courtId;
+                State.booking.date = dateStr;
+                State.booking.slots = [hour];
+                State.booking.sport = sport;
+            } else {
+                var idx = State.booking.slots.indexOf(hour);
+                if (idx >= 0) {
+                    State.booking.slots.splice(idx, 1);
+                    if (State.booking.slots.length === 0) {
+                        State.booking.court = null;
+                        State.booking.date = null;
+                        State.booking.sport = null;
+                    }
+                } else {
+                    State.booking.slots.push(hour);
+                }
+            }
+            var content = document.getElementById('homeTabContent');
+            if (content) renderBookTab(content);
+        },
+
+        bookingDateNav(dir) {
+            var d = new Date(State.bookingDate + 'T00:00:00');
+            d.setDate(d.getDate() + dir);
+            var today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (d < today) return;
+            State.bookingDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            State.booking.slots = [];
+            State.booking.court = null;
+            State.booking.date = null;
+            State.booking.sport = null;
+            var content = document.getElementById('homeTabContent');
+            if (content) renderBookTab(content);
+        },
+
+        bookingDateReset() {
+            State.bookingDate = todayStr();
+            State.booking.slots = [];
+            State.booking.court = null;
+            State.booking.date = null;
+            State.booking.sport = null;
+            var content = document.getElementById('homeTabContent');
+            if (content) renderBookTab(content);
+        }
+    };
+
+    // --- Initialize ---
+    document.addEventListener('DOMContentLoaded', function () {
+        // Mobile nav toggle
+        var navToggle = document.getElementById('navToggle');
+        function toggleNav(e) {
+            e.preventDefault();
+            document.getElementById('navLinks').classList.toggle('open');
+        }
+        navToggle.addEventListener('click', toggleNav);
+        navToggle.addEventListener('touchend', toggleNav);
+
+        // Route handling
+        window.addEventListener('hashchange', handleRoute);
+        handleRoute();
+    });
+})();

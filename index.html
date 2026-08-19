@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kepler Insight - Sports Court Reservation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-container">
+            <a href="#home" class="nav-brand">
+                <img src="img/logo.png" alt="Kepler Insight" class="nav-logo">
+                <div class="brand-text">
+                    <span class="brand-name">Kepler Insight</span>
+                    <span class="brand-sub">School of Science and Arts</span>
+                </div>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#home" class="nav-link" data-page="home">Home</a></li>
+                <li><a href="#dashboard" class="nav-link" data-page="dashboard">My Bookings</a></li>
+                <li><a href="#admin" class="nav-link" data-page="admin">Admin</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main id="app"></main>
+
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Kepler Insight School of Science and Arts</p>
+            <p>Sports Court Reservation System</p>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
