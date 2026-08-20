@@ -3,11 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kepler Insight - Sports Court Reservation</title>
+    <title>Book a Court | Kepler Insight School - Pickleball, Badminton & Table Tennis</title>
+    <meta name="description" content="Reserve pickleball, badminton, and table tennis courts online at Kepler Insight School of Science and Arts. View availability, book instantly, and pay via GCash or MariBank.">
+    <meta name="keywords" content="pickleball, badminton, table tennis, court reservation, Kepler Insight School, sports booking, Cebu, Philippines">
+    <meta name="author" content="Kepler Insight School of Science and Arts">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://booking.keplerinsightschool.com/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://booking.keplerinsightschool.com/">
+    <meta property="og:title" content="Book a Court | Kepler Insight School">
+    <meta property="og:description" content="Reserve pickleball, badminton, and table tennis courts online. View real-time availability and book instantly.">
+    <meta property="og:image" content="https://booking.keplerinsightschool.com/img/logo.png">
+    <meta property="og:site_name" content="Kepler Insight Sports Court Reservation">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Book a Court | Kepler Insight School">
+    <meta name="twitter:description" content="Reserve pickleball, badminton, and table tennis courts online at Kepler Insight School.">
+    <meta name="twitter:image" content="https://booking.keplerinsightschool.com/img/logo.png">
+
+    <!-- Mobile / PWA -->
+    <meta name="theme-color" content="#CC2229">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kepler Booking">
+    <link rel="apple-touch-icon" href="img/logo.png">
+    <link rel="icon" type="image/png" href="img/logo.png">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SportsActivityLocation",
+        "name": "Kepler Insight School Sports Courts",
+        "description": "Pickleball, badminton, and table tennis court reservation at Kepler Insight School of Science and Arts",
+        "url": "https://booking.keplerinsightschool.com",
+        "logo": "https://booking.keplerinsightschool.com/img/logo.png",
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Cebu",
+            "addressCountry": "PH"
+        },
+        "openingHoursSpecification": [
+            {
+                "@type": "OpeningHoursSpecification",
+                "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+                "opens": "18:00",
+                "closes": "22:00"
+            },
+            {
+                "@type": "OpeningHoursSpecification",
+                "dayOfWeek": ["Saturday", "Sunday"],
+                "opens": "13:00",
+                "closes": "22:00"
+            }
+        ],
+        "amenityFeature": [
+            { "@type": "LocationFeatureSpecification", "name": "Pickleball Courts", "value": true },
+            { "@type": "LocationFeatureSpecification", "name": "Badminton Court", "value": true },
+            { "@type": "LocationFeatureSpecification", "name": "Table Tennis Tables", "value": true }
+        ]
+    }
+    </script>
 </head>
 <body>
     <nav id="navbar">
