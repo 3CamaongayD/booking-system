@@ -419,7 +419,7 @@
         html += '<span><span class="gl-dot gl-free"></span> Free</span>';
         html += '<span><span class="gl-dot gl-selected"></span> Your Selection</span>';
         html += '<span><span class="gl-dot gl-taken"></span> Taken</span>';
-        html += '<span><span class="gl-dot gl-pending"></span> Awaiting Payment</span>';
+        html += '<span><span class="gl-dot gl-pending"></span> Reserved</span>';
         html += '<span><span class="gl-dot gl-blocked"></span> Reserved by Venue</span>';
         html += '</div>';
 
@@ -473,7 +473,7 @@
                     cellContent = escapeHtml(blocked.reason || 'Blocked');
                 } else if (booked) {
                     cls += isPending ? ' bg-pending' : ' bg-taken';
-                    cellContent = isPending ? 'Awaiting Payment' : 'Booked';
+                    cellContent = isPending ? 'Reserved' : 'Booked';
                 } else if (isSelected) {
                     cls += ' bg-selected';
                     cellContent = '&#8369;' + getRate(h, col.courtId, col.sport);
