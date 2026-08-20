@@ -155,81 +155,111 @@
         }).catch(function() {});
     }
 
-    // --- Data Layer ---
+    // --- Data Layer (API-backed with in-memory cache) ---
     const Data = {
-        _get(key) { return JSON.parse(localStorage.getItem(key) || '[]'); },
-        _set(key, val) {
+        _players: [],
+        _reservations: [],
+        _overrides: [],
+        _ready: false,
+
+        async _api(endpoint, method, body) {
+            var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+            if (body) opts.body = JSON.stringify(body);
+            var resp = await fetch('/api/' + endpoint, opts);
+            if (!resp.ok) throw new Error('API error: ' + resp.status);
+            return resp.json();
+        },
+
+        async init() {
             try {
-                localStorage.setItem(key, JSON.stringify(val));
+                var results = await Promise.all([
+                    this._api('players'),
+                    this._api('reservations'),
+                    this._api('overrides')
+                ]);
+                this._players = (results[0] || []).map(function(p) {
+                    return { id: p.id, fullName: p.full_name || p.fullName, email: p.email, contactNumber: p.contact_number || p.contactNumber || '', emergencyContact: p.emergency_contact || p.emergencyContact || '', createdAt: p.created_at || p.createdAt };
+                });
+                this._reservations = results[1] || [];
+                this._overrides = results[2] || [];
+                this._ready = true;
             } catch (e) {
-                UI.toast('Storage is full. Please contact admin to clear old data.', 'error');
-                throw e;
+                console.error('Data init failed:', e);
+                this._players = [];
+                this._reservations = [];
+                this._overrides = [];
+                this._ready = true;
             }
         },
 
-        getPlayers() { return this._get('pkl_players'); },
-        addPlayer(p) {
-            const players = this.getPlayers();
-            p.id = genId();
-            p.createdAt = new Date().toISOString();
-            players.push(p);
-            this._set('pkl_players', players);
-            return p;
-        },
-        getPlayer(id) { return this.getPlayers().find(p => p.id === id); },
-        getPlayerByEmail(email) {
-            return this.getPlayers().find(p => p.email.toLowerCase() === email.toLowerCase());
-        },
-        updatePlayer(id, data) {
-            const players = this.getPlayers();
-            const idx = players.findIndex(p => p.id === id);
-            if (idx >= 0) { Object.assign(players[idx], data); this._set('pkl_players', players); }
+        async refresh() {
+            await this.init();
         },
 
-        getReservations() { return this._get('pkl_reservations'); },
-        addReservation(r) {
-            const reservations = this.getReservations();
+        getPlayers() { return this._players; },
+        async addPlayer(p) {
+            p.id = genId();
+            p.createdAt = new Date().toISOString();
+            await this._api('players', 'POST', p);
+            this._players.push(p);
+            return p;
+        },
+        getPlayer(id) { return this._players.find(function(p) { return p.id === id; }); },
+        getPlayerByEmail(email) {
+            var e = email.toLowerCase();
+            return this._players.find(function(p) { return p.email.toLowerCase() === e; });
+        },
+        async updatePlayer(id, data) {
+            var idx = this._players.findIndex(function(p) { return p.id === id; });
+            if (idx >= 0) {
+                Object.assign(this._players[idx], data);
+                await this._api('players', 'PUT', { id: id, fullName: data.fullName || this._players[idx].fullName, contactNumber: data.contactNumber || this._players[idx].contactNumber });
+            }
+        },
+
+        getReservations() { return this._reservations; },
+        async addReservation(r) {
             r.id = genId();
             r.confirmationCode = genConfirmation();
             r.createdAt = new Date().toISOString();
-            reservations.push(r);
-            this._set('pkl_reservations', reservations);
+            await this._api('reservations', 'POST', r);
+            this._reservations.push(r);
             return r;
         },
         getReservationsByPlayer(playerId) {
-            return this.getReservations().filter(r => r.playerId === playerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            return this._reservations.filter(function(r) { return r.playerId === playerId; }).sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
         },
         getReservationsByDate(date) {
-            return this.getReservations().filter(r => r.date === date && r.paymentStatus !== 'cancelled');
+            return this._reservations.filter(function(r) { return r.date === date && r.paymentStatus !== 'cancelled'; });
         },
         getReservationsByCourtAndDate(courtId, date) {
-            return this.getReservations().filter(r => r.courtId === courtId && r.date === date && r.paymentStatus !== 'cancelled' && r.paymentStatus !== 'rejected');
+            return this._reservations.filter(function(r) { return r.courtId === courtId && r.date === date && r.paymentStatus !== 'cancelled' && r.paymentStatus !== 'rejected'; });
         },
-        cancelReservation(id) {
-            const reservations = this.getReservations();
-            const idx = reservations.findIndex(r => r.id === id);
-            if (idx >= 0) { reservations[idx].paymentStatus = 'cancelled'; this._set('pkl_reservations', reservations); }
+        async cancelReservation(id) {
+            var idx = this._reservations.findIndex(function(r) { return r.id === id; });
+            if (idx >= 0) {
+                this._reservations[idx].paymentStatus = 'cancelled';
+                await this._api('reservations', 'PATCH', { id: id, paymentStatus: 'cancelled' });
+            }
         },
         isSlotBooked(courtId, date, hour) {
             return this.getReservationsByCourtAndDate(courtId, date)
-                .some(r => r.slots.some(s => s.hour === hour));
+                .some(function(r) { return r.slots.some(function(s) { return s.hour === hour; }); });
         },
 
-        getOverrides() { return this._get('pkl_overrides'); },
-        addOverride(o) {
-            const overrides = this.getOverrides();
+        getOverrides() { return this._overrides; },
+        async addOverride(o) {
             o.id = genId();
-            o.createdAt = new Date().toISOString();
-            overrides.push(o);
-            this._set('pkl_overrides', overrides);
+            await this._api('overrides', 'POST', o);
+            this._overrides.push(o);
             return o;
         },
-        removeOverride(id) {
-            const overrides = this.getOverrides().filter(o => o.id !== id);
-            this._set('pkl_overrides', overrides);
+        async removeOverride(id) {
+            this._overrides = this._overrides.filter(function(o) { return o.id !== id; });
+            await this._api('overrides', 'DELETE', { id: id });
         },
         isSlotBlocked(courtId, date, hour) {
-            return this.getOverrides().find(o => o.courtId === courtId && o.date === date && o.hour === hour) || false;
+            return this._overrides.find(function(o) { return o.courtId === courtId && o.date === date && o.hour === hour; }) || false;
         },
 
         isSlotAvailable(courtId, date, hour) {
@@ -237,9 +267,22 @@
         },
 
         getAllReservationsInRange(startDate, endDate) {
-            return this.getReservations().filter(r =>
-                r.date >= startDate && r.date <= endDate && r.paymentStatus !== 'cancelled'
-            );
+            return this._reservations.filter(function(r) {
+                return r.date >= startDate && r.date <= endDate && r.paymentStatus !== 'cancelled';
+            });
+        },
+
+        async updateReservationStatus(id, status) {
+            var idx = this._reservations.findIndex(function(r) { return r.id === id; });
+            if (idx >= 0) {
+                this._reservations[idx].paymentStatus = status;
+                await this._api('reservations', 'PATCH', { id: id, paymentStatus: status });
+            }
+        },
+
+        async deleteReservation(id) {
+            this._reservations = this._reservations.filter(function(r) { return r.id !== id; });
+            await this._api('reservations', 'DELETE', { id: id });
         }
     };
 
@@ -1621,11 +1664,6 @@
             }
 
             var player = Data.getPlayerByEmail(email);
-            if (!player) {
-                player = Data.addPlayer({ fullName: name, contactNumber: phone, email: email, emergencyContact: '' });
-            } else {
-                Data.updatePlayer(player.id, { fullName: name, contactNumber: phone });
-            }
 
             const paymentMethod = document.getElementById('selectedPayment').value;
             const receiptInput = document.getElementById('receiptUpload');
@@ -1652,30 +1690,42 @@
             UI.showProcessing('Submitting booking...');
 
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const receiptData = e.target.result;
+            reader.onload = async function(e) {
+                try {
+                    const receiptData = e.target.result;
 
-                const reservation = Data.addReservation({
-                    playerId: player.id,
-                    courtId: court,
-                    sport: State.booking.sport || 'pickleball',
-                    date: date,
-                    slots: slotData,
-                    totalAmount: total,
-                    paymentStatus: 'pending',
-                    paymentMethod: paymentMethod,
-                    receiptImage: receiptData
-                });
+                    if (!player) {
+                        player = await Data.addPlayer({ fullName: name, contactNumber: phone, email: email, emergencyContact: '' });
+                    } else {
+                        await Data.updatePlayer(player.id, { fullName: name, contactNumber: phone });
+                    }
 
-                sendBookingEmail('pending', reservation, name, email);
+                    const reservation = await Data.addReservation({
+                        playerId: player.id,
+                        courtId: court,
+                        sport: State.booking.sport || 'pickleball',
+                        date: date,
+                        slots: slotData,
+                        totalAmount: total,
+                        paymentStatus: 'pending',
+                        paymentMethod: paymentMethod,
+                        receiptImage: receiptData
+                    });
 
-                State.lastConfirmation = reservation;
-                State.lastConfirmation._playerName = name;
-                State.lastConfirmation._playerEmail = email;
-                State.booking = { court: null, date: null, slots: [], sport: null };
-                UI.hideProcessing();
-                UI.toast('Booking submitted! Awaiting admin verification.', 'success');
-                location.hash = '#confirmation';
+                    sendBookingEmail('pending', reservation, name, email);
+
+                    State.lastConfirmation = reservation;
+                    State.lastConfirmation._playerName = name;
+                    State.lastConfirmation._playerEmail = email;
+                    State.booking = { court: null, date: null, slots: [], sport: null };
+                    UI.hideProcessing();
+                    UI.toast('Booking submitted! Awaiting admin verification.', 'success');
+                    location.hash = '#confirmation';
+                } catch (err) {
+                    UI.hideProcessing();
+                    UI.toast('Failed to submit booking. Please try again.', 'error');
+                    console.error('Booking error:', err);
+                }
             };
             reader.readAsDataURL(receiptInput.files[0]);
         },
@@ -1718,11 +1768,15 @@
             );
         },
 
-        confirmCancel(id) {
-            Data.cancelReservation(id);
-            UI.closeModal();
-            UI.toast('Booking cancelled', 'info');
-            handleRoute();
+        async confirmCancel(id) {
+            try {
+                await Data.cancelReservation(id);
+                UI.closeModal();
+                UI.toast('Booking cancelled', 'info');
+                handleRoute();
+            } catch (err) {
+                UI.toast('Failed to cancel booking', 'error');
+            }
         },
 
         closeModal() { UI.closeModal(); },
@@ -1751,43 +1805,52 @@
             if (content) renderAdminSchedule(content);
         },
 
-        approveBooking(id) {
-            const allRes = Data.getReservations();
-            const res = allRes.find(r => r.id === id);
-            if (!res) return;
-            res.paymentStatus = 'paid';
-            Data._set('pkl_reservations', allRes);
-            var player = Data.getPlayer(res.playerId);
-            if (player) {
-                sendBookingEmail('confirmed', res, player.fullName, player.email);
+        async approveBooking(id) {
+            try {
+                await Data.updateReservationStatus(id, 'paid');
+                var res = Data.getReservations().find(function(r) { return r.id === id; });
+                if (res) {
+                    var player = Data.getPlayer(res.playerId);
+                    if (player) {
+                        sendBookingEmail('confirmed', res, player.fullName, player.email);
+                    }
+                }
+                UI.toast('Booking approved!', 'success');
+                const content = document.getElementById('adminTabContent');
+                if (content) renderAdminBookings(content);
+            } catch (err) {
+                UI.toast('Failed to approve booking', 'error');
             }
-            UI.toast('Booking approved!', 'success');
-            const content = document.getElementById('adminTabContent');
-            if (content) renderAdminBookings(content);
         },
 
-        rejectBooking(id) {
-            const allRes = Data.getReservations();
-            const res = allRes.find(r => r.id === id);
-            if (!res) return;
-            res.paymentStatus = 'rejected';
-            Data._set('pkl_reservations', allRes);
-            var player = Data.getPlayer(res.playerId);
-            if (player) {
-                sendBookingEmail('rejected', res, player.fullName, player.email);
+        async rejectBooking(id) {
+            try {
+                await Data.updateReservationStatus(id, 'rejected');
+                var res = Data.getReservations().find(function(r) { return r.id === id; });
+                if (res) {
+                    var player = Data.getPlayer(res.playerId);
+                    if (player) {
+                        sendBookingEmail('rejected', res, player.fullName, player.email);
+                    }
+                }
+                UI.toast('Booking rejected', 'info');
+                const content = document.getElementById('adminTabContent');
+                if (content) renderAdminBookings(content);
+            } catch (err) {
+                UI.toast('Failed to reject booking', 'error');
             }
-            UI.toast('Booking rejected', 'info');
-            const content = document.getElementById('adminTabContent');
-            if (content) renderAdminBookings(content);
         },
 
-        deleteBooking(id) {
+        async deleteBooking(id) {
             if (!confirm('Are you sure you want to delete this booking? This cannot be undone.')) return;
-            var allRes = Data.getReservations().filter(function(r) { return r.id !== id; });
-            Data._set('pkl_reservations', allRes);
-            UI.toast('Booking deleted', 'info');
-            var content = document.getElementById('adminTabContent');
-            if (content) renderAdminBookings(content);
+            try {
+                await Data.deleteReservation(id);
+                UI.toast('Booking deleted', 'info');
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminBookings(content);
+            } catch (err) {
+                UI.toast('Failed to delete booking', 'error');
+            }
         },
 
         viewReceipt(id) {
@@ -1841,7 +1904,7 @@
             `, `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`);
         },
 
-        addOverride() {
+        async addOverride() {
             const courtId = parseInt(document.getElementById('overrideCourt').value);
             const date = document.getElementById('overrideDate').value;
             const hour = parseInt(document.getElementById('overrideHour').value);
@@ -1850,17 +1913,25 @@
             if (!date || !reason) { UI.toast('Please fill in all fields', 'error'); return; }
             if (Data.isSlotBlocked(courtId, date, hour)) { UI.toast('This slot is already blocked', 'warning'); return; }
 
-            Data.addOverride({ courtId, date, hour, reason });
-            UI.toast('Slot blocked successfully', 'success');
-            const content = document.getElementById('adminTabContent');
-            if (content) renderAdminOverrides(content);
+            try {
+                await Data.addOverride({ courtId, date, hour, reason });
+                UI.toast('Slot blocked successfully', 'success');
+                const content = document.getElementById('adminTabContent');
+                if (content) renderAdminOverrides(content);
+            } catch (err) {
+                UI.toast('Failed to block slot', 'error');
+            }
         },
 
-        removeOverride(id) {
-            Data.removeOverride(id);
-            UI.toast('Override removed', 'info');
-            const content = document.getElementById('adminTabContent');
-            if (content) renderAdminOverrides(content);
+        async removeOverride(id) {
+            try {
+                await Data.removeOverride(id);
+                UI.toast('Override removed', 'info');
+                const content = document.getElementById('adminTabContent');
+                if (content) renderAdminOverrides(content);
+            } catch (err) {
+                UI.toast('Failed to remove override', 'error');
+            }
         },
 
         filterPlayers(query) {
@@ -1946,7 +2017,7 @@
     };
 
     // --- Initialize ---
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', async function () {
         // Mobile nav toggle
         var navToggle = document.getElementById('navToggle');
         function toggleNav(e) {
@@ -1956,8 +2027,19 @@
         navToggle.addEventListener('click', toggleNav);
         navToggle.addEventListener('touchend', toggleNav);
 
+        // Load data from database
+        await Data.init();
+
         // Route handling
         window.addEventListener('hashchange', handleRoute);
         handleRoute();
+
+        // Auto-refresh every 30 seconds for multi-device sync
+        setInterval(function() {
+            Data.refresh().then(function() {
+                var page = location.hash.replace('#', '') || 'home';
+                if (page === 'admin' || page === 'dashboard') handleRoute();
+            });
+        }, 30000);
     });
 })();
