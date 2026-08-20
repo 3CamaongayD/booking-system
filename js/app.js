@@ -19,11 +19,9 @@
             weekend: { start: 13, end: 22 }
         },
         rates: {
-            offPeak: 200,
-            peak: 320,
+            pickleball: 300,
+            badminton: 250,
             peakStart: 18,
-            badmintonPeak: 280,
-            badmintonOffPeak: 200,
             tableTennisPeak: 200,
             tableTennisOffPeak: 120
         },
@@ -111,9 +109,9 @@
         var isPeak = hour >= CONFIG.rates.peakStart;
         if (court) {
             if (court.type === 'table-tennis') return isPeak ? CONFIG.rates.tableTennisPeak : CONFIG.rates.tableTennisOffPeak;
-            if (sport === 'badminton') return isPeak ? CONFIG.rates.badmintonPeak : CONFIG.rates.badmintonOffPeak;
+            if (sport === 'badminton') return CONFIG.rates.badminton;
         }
-        return isPeak ? CONFIG.rates.peak : CONFIG.rates.offPeak;
+        return CONFIG.rates.pickleball;
     }
 
     function getDiscount(slotCount) {
@@ -123,7 +121,11 @@
     }
 
     function getRateLabel(hour, courtId, sport) {
-        return hour < CONFIG.rates.peakStart ? 'Off-Peak' : 'Peak';
+        var court = getCourtConfig(courtId);
+        if (court && court.type === 'table-tennis') {
+            return hour < CONFIG.rates.peakStart ? 'Off-Peak' : 'Peak';
+        }
+        return '';
     }
 
     function escapeHtml(str) {
@@ -426,12 +428,14 @@
         var gridCols = [];
         CONFIG.courts.forEach(function(c) {
             if (c.type === 'dual') {
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: 'Pickleball', rate: '&#8369;200-320/hr' });
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;200-280/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: 'Pickleball', rate: '&#8369;300/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;250/hr' });
             } else if (c.type === 'table-tennis') {
                 gridCols.push({ courtId: c.id, name: c.name, sport: 'table-tennis', label: c.label, rate: '&#8369;120-200/hr' });
+            } else if (c.type === 'badminton') {
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: c.label, rate: '&#8369;250/hr' });
             } else {
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: c.label, rate: '&#8369;200-320/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: c.label, rate: '&#8369;300/hr' });
             }
         });
 
@@ -522,9 +526,9 @@
                 '<div class="about-card"><h3>&#128176; Rates</h3>' +
                     '<h4 style="font-size:11px;letter-spacing:1px;color:var(--gray-400);margin:0 0 10px;">RATE BY FACILITY</h4>' +
                     '<div class="rate-list">' +
-                        '<div class="rate-row"><span>Court 1 <small>Pickleball</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
-                        '<div class="rate-row"><span>Court 2 <small>Pickleball</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
-                        '<div class="rate-row"><span>Court 3 <small>PB / Badminton</small></span><span><strong>&#8369;200-320</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 1 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 2 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 3 <small>PB &#8369;300 / Badminton &#8369;250</small></span><span>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 1 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 2 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                     '</div>' +
