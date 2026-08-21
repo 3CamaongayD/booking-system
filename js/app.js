@@ -1385,33 +1385,39 @@
 
         content.innerHTML = `
             <div class="card mb-3">
-                <div class="card-header">Block a Time Slot</div>
-                <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px;">Block slots for maintenance, school events, or other reasons.</p>
+                <div class="card-header">Block Time Slots</div>
+                <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px;">Block slots for maintenance, school events, or other reasons. Select multiple courts, dates, and hours at once.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="required">Court</label>
-                        <select class="form-control" id="overrideCourt">
-                            ${CONFIG.courts.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-                        </select>
+                        <label class="required">Courts</label>
+                        <div id="overrideCourts" style="display:flex; flex-direction:column; gap:6px;">
+                            ${CONFIG.courts.map(c => `<label style="display:flex; align-items:center; gap:6px; font-weight:400; cursor:pointer;"><input type="checkbox" value="${c.id}" style="width:16px; height:16px;"> ${c.name}</label>`).join('')}
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label class="required">Date</label>
-                        <input type="date" class="form-control" id="overrideDate" value="${todayStr()}">
+                        <label class="required">Date Range</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="date" class="form-control" id="overrideDateStart" value="${todayStr()}" style="flex:1;">
+                            <span style="color:var(--gray-500);">to</span>
+                            <input type="date" class="form-control" id="overrideDateEnd" value="${todayStr()}" style="flex:1;">
+                        </div>
+                        <p style="font-size:11px; color:var(--gray-400); margin-top:4px;">Set both to the same date for a single day.</p>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="required">Hour</label>
-                        <select class="form-control" id="overrideHour">
-                            ${Array.from({ length: 9 }, (_, i) => i + 13).map(h => `<option value="${h}">${formatHour(h)} – ${formatHour(h + 1)}</option>`).join('')}
-                        </select>
+                        <label class="required">Hours</label>
+                        <div id="overrideHours" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            ${Array.from({ length: 9 }, (_, i) => i + 13).map(h => `<label style="display:flex; align-items:center; gap:4px; font-weight:400; cursor:pointer; min-width:140px;"><input type="checkbox" value="${h}" style="width:16px; height:16px;"> ${formatHour(h)} – ${formatHour(h + 1)}</label>`).join('')}
+                        </div>
+                        <div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=true})">Select All</button> <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=false})">Clear</button></div>
                     </div>
                     <div class="form-group">
                         <label class="required">Reason</label>
                         <input type="text" class="form-control" id="overrideReason" placeholder="e.g. Maintenance">
                     </div>
                 </div>
-                <button class="btn btn-danger" onclick="window.PKL.addOverride()">Block Slot</button>
+                <button class="btn btn-danger" onclick="window.PKL.addOverride()">Block Slots</button>
             </div>
 
             <div class="card">
@@ -1909,21 +1915,50 @@
         },
 
         async addOverride() {
-            const courtId = parseInt(document.getElementById('overrideCourt').value);
-            const date = document.getElementById('overrideDate').value;
-            const hour = parseInt(document.getElementById('overrideHour').value);
-            const reason = document.getElementById('overrideReason').value.trim();
+            var courtCheckboxes = document.querySelectorAll('#overrideCourts input:checked');
+            var courtIds = Array.from(courtCheckboxes).map(function(c) { return parseInt(c.value); });
+            var dateStart = document.getElementById('overrideDateStart').value;
+            var dateEnd = document.getElementById('overrideDateEnd').value;
+            var hourCheckboxes = document.querySelectorAll('#overrideHours input:checked');
+            var hours = Array.from(hourCheckboxes).map(function(c) { return parseInt(c.value); });
+            var reason = document.getElementById('overrideReason').value.trim();
 
-            if (!date || !reason) { UI.toast('Please fill in all fields', 'error'); return; }
-            if (Data.isSlotBlocked(courtId, date, hour)) { UI.toast('This slot is already blocked', 'warning'); return; }
+            if (courtIds.length === 0) { UI.toast('Please select at least one court', 'error'); return; }
+            if (!dateStart || !dateEnd) { UI.toast('Please select a date range', 'error'); return; }
+            if (dateEnd < dateStart) { UI.toast('End date must be on or after start date', 'error'); return; }
+            if (hours.length === 0) { UI.toast('Please select at least one hour', 'error'); return; }
+            if (!reason) { UI.toast('Please enter a reason', 'error'); return; }
 
+            var dates = [];
+            var d = new Date(dateStart + 'T00:00:00');
+            var end = new Date(dateEnd + 'T00:00:00');
+            while (d <= end) {
+                dates.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+                d.setDate(d.getDate() + 1);
+            }
+
+            var count = 0;
+            var skipped = 0;
             try {
-                await Data.addOverride({ courtId, date, hour, reason });
-                UI.toast('Slot blocked successfully', 'success');
+                for (var ci = 0; ci < courtIds.length; ci++) {
+                    for (var di = 0; di < dates.length; di++) {
+                        for (var hi = 0; hi < hours.length; hi++) {
+                            if (Data.isSlotBlocked(courtIds[ci], dates[di], hours[hi])) {
+                                skipped++;
+                                continue;
+                            }
+                            await Data.addOverride({ courtId: courtIds[ci], date: dates[di], hour: hours[hi], reason: reason });
+                            count++;
+                        }
+                    }
+                }
+                var msg = count + ' slot' + (count !== 1 ? 's' : '') + ' blocked';
+                if (skipped > 0) msg += ' (' + skipped + ' already blocked, skipped)';
+                UI.toast(msg, 'success');
                 const content = document.getElementById('adminTabContent');
                 if (content) renderAdminOverrides(content);
             } catch (err) {
-                UI.toast('Failed to block slot', 'error');
+                UI.toast('Failed to block slots', 'error');
             }
         },
 
