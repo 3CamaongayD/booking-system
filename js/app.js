@@ -115,8 +115,6 @@
     }
 
     function getDiscount(slotCount) {
-        if (slotCount >= 4) return 0.05;
-        if (slotCount >= 3) return 0.03;
         return 0;
     }
 
@@ -512,7 +510,6 @@
             html += '<div class="book-summary-info">';
             html += '<strong>' + courtName + (sportName ? ' (' + sportName + ')' : '') + '</strong>';
             html += '<span>' + sortedSlots.length + ' hr' + (sortedSlots.length > 1 ? 's' : '') + ' &bull; ' + formatHour(sortedSlots[0]) + ' - ' + formatHour(sortedSlots[sortedSlots.length - 1] + 1) + '</span>';
-            if (disc > 0) html += '<span class="discount-note">' + Math.round(disc * 100) + '% multi-hour discount</span>';
             html += '</div>';
             html += '<div class="book-summary-action">';
             html += '<span class="book-total">' + formatCurrency(total) + '</span>';
@@ -536,8 +533,7 @@
                         '<div class="rate-row"><span>Table 1 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 2 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                     '</div>' +
-                    '<p style="font-size:12px;color:var(--gray-400);margin-top:12px;">Multi-hour discounts: 3% off for 3 hrs, 5% off for 4+ hrs</p>' +
-                '</div>' +
+                                    '</div>' +
                 '<div class="about-card"><h3>&#128347; Hours of Operation</h3>' +
                     '<div class="hours-list">' +
                         '<div class="hour-row"><span>Monday - Friday</span><span>6:00 PM - 10:00 PM</span></div>' +
@@ -560,7 +556,7 @@
         html += '<div class="about-card mt-3"><h3>&#10067; Frequently Asked Questions</h3>' +
             '<div class="faq-list" style="max-width:100%;">' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I book a court or table?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Select your preferred facility from the Book tab, pick a date, choose your time slots, then proceed to checkout. Enter your details, select a payment method, and confirm your booking.</p></div></div>' +
-                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: Off-Peak &#8369;200/hr, Peak &#8369;320/hr. Badminton: Off-Peak &#8369;200/hr, Peak &#8369;280/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr. Peak hours are 6 PM - 10 PM. Multi-hour discounts: 3% off for 3 hours, 5% off for 4+ hours.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: &#8369;300/hr. Badminton: &#8369;250/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr (peak hours are 6 PM onwards).</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What payment methods are accepted?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>We accept GCash and Maribank. Send payment to the number provided at checkout, then upload your receipt screenshot for verification.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact the school administration directly. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What happens if I arrive late?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time.</p></div></div>' +
@@ -1145,7 +1141,7 @@
             },
             {
                 q: 'How much does it cost to play?',
-                a: 'Pickleball: Off-Peak ₱200/hr, Peak ₱320/hr. Badminton: Off-Peak ₱200/hr, Peak ₱280/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr. Peak hours are 6 PM - 10 PM. Multi-hour discounts: 3% off for 3 hours, 5% off for 4+ hours.'
+                a: 'Pickleball: ₱300/hr. Badminton: ₱250/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr (peak hours are 6 PM onwards).'
             },
             {
                 q: 'Can I book multiple time slots at once?',
