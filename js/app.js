@@ -154,7 +154,11 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        }).catch(function() {});
+        }).then(function(resp) {
+            if (!resp.ok) console.error('Email API error:', resp.status);
+        }).catch(function(err) {
+            console.error('Email send failed:', err);
+        });
     }
 
     // --- Data Layer (API-backed with in-memory cache) ---
