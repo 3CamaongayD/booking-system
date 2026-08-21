@@ -16,7 +16,7 @@
         ],
         schedule: {
             weekday: { start: 18, end: 22 },
-            weekend: { start: 13, end: 22 }
+            weekend: { start: 16, end: 22 }
         },
         rates: {
             pickleball: 300,
@@ -537,7 +537,7 @@
                 '<div class="about-card"><h3>&#128347; Hours of Operation</h3>' +
                     '<div class="hours-list">' +
                         '<div class="hour-row"><span>Monday - Friday</span><span>6:00 PM - 10:00 PM</span></div>' +
-                        '<div class="hour-row"><span>Saturday - Sunday</span><span>1:00 PM - 10:00 PM</span></div>' +
+                        '<div class="hour-row"><span>Saturday - Sunday</span><span>4:00 PM - 10:00 PM</span></div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -1137,7 +1137,7 @@
             },
             {
                 q: 'What are the operating hours?',
-                a: 'Monday to Friday: 6:00 PM - 10:00 PM. Saturday and Sunday: 1:00 PM - 10:00 PM. The courts are closed outside these hours.'
+                a: 'Monday to Friday: 6:00 PM - 10:00 PM. Saturday and Sunday: 4:00 PM - 10:00 PM. The courts are closed outside these hours.'
             },
             {
                 q: 'How much does it cost to play?',
