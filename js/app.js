@@ -165,6 +165,7 @@
         _reservations: [],
         _overrides: [],
         _ready: false,
+        _writing: false,
 
         async _api(endpoint, method, body) {
             var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
@@ -197,6 +198,7 @@
         },
 
         async refresh() {
+            if (this._writing) return;
             await this.init();
         },
 
@@ -259,8 +261,10 @@
             return o;
         },
         async removeOverride(id) {
+            this._writing = true;
             this._overrides = this._overrides.filter(function(o) { return o.id !== id; });
             await this._api('overrides', 'DELETE', { id: id });
+            this._writing = false;
         },
         isSlotBlocked(courtId, date, hour) {
             return this._overrides.find(function(o) { return o.courtId === courtId && o.date === date && o.hour === hour; }) || false;
@@ -277,16 +281,20 @@
         },
 
         async updateReservationStatus(id, status) {
+            this._writing = true;
             var idx = this._reservations.findIndex(function(r) { return r.id === id; });
             if (idx >= 0) {
                 this._reservations[idx].paymentStatus = status;
                 await this._api('reservations', 'PATCH', { id: id, paymentStatus: status });
             }
+            this._writing = false;
         },
 
         async deleteReservation(id) {
+            this._writing = true;
             this._reservations = this._reservations.filter(function(r) { return r.id !== id; });
             await this._api('reservations', 'DELETE', { id: id });
+            this._writing = false;
         }
     };
 
@@ -2108,12 +2116,9 @@
         window.addEventListener('hashchange', handleRoute);
         handleRoute();
 
-        // Auto-refresh every 30 seconds for multi-device sync
+        // Auto-refresh every 30 seconds for multi-device sync (data only, no re-render)
         setInterval(function() {
-            Data.refresh().then(function() {
-                var page = location.hash.replace('#', '') || 'home';
-                if (page === 'admin' || page === 'dashboard') handleRoute();
-            });
+            Data.refresh();
         }, 30000);
     });
 })();
