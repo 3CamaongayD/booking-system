@@ -2,7 +2,7 @@ const { getDb } = require('./db');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -34,6 +34,13 @@ module.exports = async (req, res) => {
         hour: rows[0].hour,
         reason: rows[0].reason
       });
+    }
+
+    if (req.method === 'PATCH') {
+      const { id, reason } = req.body;
+      if (!id || !reason) return res.status(400).json({ error: 'Missing id or reason' });
+      await sql`UPDATE overrides SET reason = ${reason} WHERE id = ${id}`;
+      return res.status(200).json({ success: true });
     }
 
     if (req.method === 'DELETE') {

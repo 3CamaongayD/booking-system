@@ -1421,18 +1421,22 @@
             </div>
 
             <div class="card">
-                <div class="card-header">Current Overrides</div>
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Current Overrides</span>
+                    ${overrides.length > 0 ? '<button class="btn btn-danger btn-sm" onclick="window.PKL.deleteSelectedOverrides()">Delete Selected</button>' : ''}
+                </div>
                 ${overrides.length > 0 ? `
                     <div class="table-container">
                         <table>
-                            <thead><tr><th>Court</th><th>Date</th><th>Time</th><th>Reason</th><th></th></tr></thead>
+                            <thead><tr><th style="width:40px;"><input type="checkbox" id="overrideSelectAll" onclick="document.querySelectorAll('.override-check').forEach(function(c){c.checked=this.checked}.bind(this))" style="width:16px;height:16px;"></th><th>Court</th><th>Date</th><th>Time</th><th>Reason</th><th></th></tr></thead>
                             <tbody>
                                 ${overrides.map(o => `<tr>
+                                    <td><input type="checkbox" class="override-check" value="${o.id}" style="width:16px;height:16px;"></td>
                                     <td>${getCourtName(o.courtId)}</td>
                                     <td>${formatDate(o.date)}</td>
                                     <td>${formatHour(o.hour)} – ${formatHour(o.hour + 1)}</td>
                                     <td>${escapeHtml(o.reason)}</td>
-                                    <td><button class="btn btn-outline btn-sm" onclick="window.PKL.removeOverride('${o.id}')">Remove</button></td>
+                                    <td><button class="btn btn-outline btn-sm" onclick="window.PKL.editOverride('${o.id}')" style="margin-right:4px;">Edit</button><button class="btn btn-outline btn-sm" onclick="window.PKL.removeOverride('${o.id}')">Remove</button></td>
                                 </tr>`).join('')}
                             </tbody>
                         </table>
@@ -1971,6 +1975,37 @@
             } catch (err) {
                 UI.toast('Failed to remove override', 'error');
             }
+        },
+
+        async deleteSelectedOverrides() {
+            var checked = document.querySelectorAll('.override-check:checked');
+            if (checked.length === 0) { UI.toast('No overrides selected', 'warning'); return; }
+            if (!confirm('Delete ' + checked.length + ' selected override(s)?')) return;
+            try {
+                for (var i = 0; i < checked.length; i++) {
+                    await Data.removeOverride(checked[i].value);
+                }
+                UI.toast(checked.length + ' override(s) deleted', 'info');
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminOverrides(content);
+            } catch (err) {
+                UI.toast('Failed to delete overrides', 'error');
+            }
+        },
+
+        editOverride(id) {
+            var o = Data.getOverrides().find(function(ov) { return ov.id === id; });
+            if (!o) return;
+            var newReason = prompt('Edit reason for ' + getCourtName(o.courtId) + ' on ' + formatDate(o.date) + ' at ' + formatHour(o.hour) + ':', o.reason);
+            if (newReason === null || newReason.trim() === '') return;
+            Data._api('overrides', 'PATCH', { id: o.id, reason: newReason.trim() }).then(function() {
+                o.reason = newReason.trim();
+                UI.toast('Override updated', 'success');
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminOverrides(content);
+            }).catch(function() {
+                UI.toast('Failed to update override', 'error');
+            });
         },
 
         filterPlayers(query) {
