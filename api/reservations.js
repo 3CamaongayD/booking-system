@@ -25,11 +25,14 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PATCH') {
-      const { id, paymentStatus } = req.body;
-      if (!id || !paymentStatus) {
-        return res.status(400).json({ error: 'Missing id or paymentStatus' });
+      const { id, paymentStatus, totalAmount } = req.body;
+      if (!id) return res.status(400).json({ error: 'Missing id' });
+      if (paymentStatus) {
+        await sql`UPDATE reservations SET payment_status = ${paymentStatus} WHERE id = ${id}`;
       }
-      await sql`UPDATE reservations SET payment_status = ${paymentStatus} WHERE id = ${id}`;
+      if (totalAmount !== undefined) {
+        await sql`UPDATE reservations SET total_amount = ${totalAmount} WHERE id = ${id}`;
+      }
       return res.status(200).json({ success: true });
     }
 
