@@ -15,8 +15,8 @@
             { id: 5, name: 'Table 2', type: 'table-tennis', label: 'Table Tennis' }
         ],
         schedule: {
-            weekday: { start: 18, end: 22 },
-            weekend: { start: 16, end: 22 }
+            weekday: { start: 18, end: 24 },
+            weekend: { start: 16, end: 24 }
         },
         rates: {
             pickleball: 300,
@@ -544,8 +544,8 @@
                                     '</div>' +
                 '<div class="about-card"><h3>&#128347; Hours of Operation</h3>' +
                     '<div class="hours-list">' +
-                        '<div class="hour-row"><span>Monday - Friday</span><span>6:00 PM - 10:00 PM</span></div>' +
-                        '<div class="hour-row"><span>Saturday - Sunday</span><span>4:00 PM - 10:00 PM</span></div>' +
+                        '<div class="hour-row"><span>Monday - Friday</span><span>6:00 PM - 12:00 AM</span></div>' +
+                        '<div class="hour-row"><span>Saturday - Sunday</span><span>4:00 PM - 12:00 AM</span></div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -1145,7 +1145,7 @@
             },
             {
                 q: 'What are the operating hours?',
-                a: 'Monday to Friday: 6:00 PM - 10:00 PM. Saturday and Sunday: 4:00 PM - 10:00 PM. The courts are closed outside these hours.'
+                a: 'Monday to Friday: 6:00 PM - 12:00 AM. Saturday and Sunday: 4:00 PM - 12:00 AM. The courts are closed outside these hours.'
             },
             {
                 q: 'How much does it cost to play?',
@@ -1416,7 +1416,7 @@
                     <div class="form-group">
                         <label class="required">Hours</label>
                         <div id="overrideHours" style="display:flex; flex-wrap:wrap; gap:6px;">
-                            ${Array.from({ length: 9 }, (_, i) => i + 13).map(h => `<label style="display:flex; align-items:center; gap:4px; font-weight:400; cursor:pointer; min-width:140px;"><input type="checkbox" value="${h}" style="width:16px; height:16px;"> ${formatHour(h)} – ${formatHour(h + 1)}</label>`).join('')}
+                            ${Array.from({ length: 11 }, (_, i) => i + 13).map(h => `<label style="display:flex; align-items:center; gap:4px; font-weight:400; cursor:pointer; min-width:140px;"><input type="checkbox" value="${h}" style="width:16px; height:16px;"> ${formatHour(h)} – ${formatHour(h + 1)}</label>`).join('')}
                         </div>
                         <div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=true})">Select All</button> <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=false})">Clear</button></div>
                     </div>
