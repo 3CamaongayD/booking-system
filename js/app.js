@@ -558,6 +558,14 @@
                 '<div class="about-card"><h3>&#127970; Facilities</h3>' +
                     '<div class="facilities-tags"><span>&#127934; 3 Courts</span><span>&#127955; 2 Table Tennis</span></div>' +
                 '</div>' +
+                '<div class="about-card"><h3>&#128222; Contact Us</h3>' +
+                    '<p style="font-size:14px; color:var(--gray-600); margin-bottom:12px;">For inquiries, reservations, or assistance:</p>' +
+                    '<div style="display:flex; flex-direction:column; gap:8px;">' +
+                        '<div style="display:flex; align-items:center; gap:8px;"><span>&#128222;</span><a href="tel:09312032087" style="color:var(--crimson); font-weight:600;">0931 203 2087</a></div>' +
+                        '<div style="display:flex; align-items:center; gap:8px;"><span>&#9993;</span><a href="mailto:booking@keplerinsightschool.com" style="color:var(--crimson); font-weight:600;">booking@keplerinsightschool.com</a></div>' +
+                        '<div style="display:flex; align-items:center; gap:8px;"><span>&#9993;</span><a href="mailto:docamaongay9@gmail.com" style="color:var(--crimson); font-weight:600;">docamaongay9@gmail.com</a></div>' +
+                    '</div>' +
+                '</div>' +
             '</div>' +
         '</div>';
 
@@ -566,7 +574,7 @@
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I book a court or table?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Select your preferred facility from the Book tab, pick a date, choose your time slots, then proceed to checkout. Enter your details, select a payment method, and confirm your booking.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: &#8369;300/hr. Badminton: &#8369;250/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr (peak hours are 6 PM onwards).</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What payment methods are accepted?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>We accept GCash and Maribank. Send payment to the number provided at checkout, then upload your receipt screenshot for verification.</p></div></div>' +
-                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact the school administration directly. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact us at 0931 203 2087 or email booking@keplerinsightschool.com. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What happens if I arrive late?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time.</p></div></div>' +
             '</div>' +
         '</div>';
