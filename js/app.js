@@ -185,7 +185,11 @@
                 this._players = (results[0] || []).map(function(p) {
                     return { id: p.id, fullName: p.full_name || p.fullName, email: p.email, contactNumber: p.contact_number || p.contactNumber || '', emergencyContact: p.emergency_contact || p.emergencyContact || '', createdAt: p.created_at || p.createdAt };
                 });
-                this._reservations = results[1] || [];
+                this._reservations = (results[1] || []).map(function(r) {
+                    if (typeof r.slots === 'string') r.slots = JSON.parse(r.slots);
+                    if (!Array.isArray(r.slots)) r.slots = [];
+                    return r;
+                });
                 this._overrides = results[2] || [];
                 this._ready = true;
             } catch (e) {

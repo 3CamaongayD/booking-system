@@ -4,6 +4,7 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const sql = getDb();
@@ -64,7 +65,7 @@ function formatRow(r, includeReceipt) {
     courtId: r.court_id,
     sport: r.sport,
     date: r.date,
-    slots: typeof r.slots === 'string' ? JSON.parse(r.slots) : r.slots,
+    slots: typeof r.slots === 'string' ? JSON.parse(r.slots) : (Array.isArray(r.slots) ? r.slots : []),
     totalAmount: Number(r.total_amount),
     paymentStatus: r.payment_status,
     paymentMethod: r.payment_method,
