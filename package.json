@@ -2,6 +2,6 @@
   "private": true,
   "dependencies": {
     "resend": "^4.0.0",
-    "@neondatabase/serverless": "^0.10.0"
+    "postgres": "^3.4.0"
   }
 }

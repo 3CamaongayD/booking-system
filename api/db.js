@@ -1,7 +1,11 @@
-const { neon } = require('@neondatabase/serverless');
+const postgres = require('postgres');
 
+let sql;
 function getDb() {
-  return neon(process.env.DATABASE_URL);
+  if (!sql) {
+    sql = postgres(process.env.DATABASE_URL, { ssl: 'require', max: 1 });
+  }
+  return sql;
 }
 
 module.exports = { getDb };

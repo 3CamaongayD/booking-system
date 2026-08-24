@@ -10,8 +10,14 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === 'GET') {
-      const rows = await sql`SELECT * FROM reservations ORDER BY created_at DESC`;
-      return res.status(200).json(rows.map(formatRow));
+      const { id } = req.query;
+      if (id) {
+        const rows = await sql`SELECT * FROM reservations WHERE id = ${id}`;
+        if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
+        return res.status(200).json(formatRow(rows[0], true));
+      }
+      const rows = await sql`SELECT id, confirmation_code, player_id, court_id, sport, date, slots, total_amount, payment_status, payment_method, created_at FROM reservations ORDER BY created_at DESC`;
+      return res.status(200).json(rows.map(r => formatRow(r, false)));
     }
 
     if (req.method === 'POST') {
@@ -19,9 +25,9 @@ module.exports = async (req, res) => {
       const rows = await sql`
         INSERT INTO reservations (id, confirmation_code, player_id, court_id, sport, date, slots, total_amount, payment_status, payment_method, receipt_image)
         VALUES (${r.id}, ${r.confirmationCode}, ${r.playerId}, ${r.courtId}, ${r.sport || 'pickleball'}, ${r.date}, ${JSON.stringify(r.slots)}, ${r.totalAmount}, ${r.paymentStatus || 'pending'}, ${r.paymentMethod || ''}, ${r.receiptImage || null})
-        RETURNING *
+        RETURNING id, confirmation_code, player_id, court_id, sport, date, slots, total_amount, payment_status, payment_method, created_at
       `;
-      return res.status(200).json(formatRow(rows[0]));
+      return res.status(200).json(formatRow(rows[0], false));
     }
 
     if (req.method === 'PATCH') {
@@ -50,8 +56,8 @@ module.exports = async (req, res) => {
   }
 };
 
-function formatRow(r) {
-  return {
+function formatRow(r, includeReceipt) {
+  var row = {
     id: r.id,
     confirmationCode: r.confirmation_code,
     playerId: r.player_id,
@@ -62,7 +68,8 @@ function formatRow(r) {
     totalAmount: Number(r.total_amount),
     paymentStatus: r.payment_status,
     paymentMethod: r.payment_method,
-    receiptImage: r.receipt_image,
     createdAt: r.created_at
   };
+  if (includeReceipt) row.receiptImage = r.receipt_image;
+  return row;
 }

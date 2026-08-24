@@ -1316,7 +1316,7 @@
                 '<td>' + (showActions
                     ? '<button class="btn btn-success btn-sm" onclick="window.PKL.approveBooking(\'' + r.id + '\')">Approve</button> '
                       + '<button class="btn btn-danger btn-sm" onclick="window.PKL.rejectBooking(\'' + r.id + '\')" style="margin-left:4px;">Reject</button> '
-                      + (r.receiptImage ? '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')" style="margin-left:4px;">Receipt</button>' : '')
+                      + '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')" style="margin-left:4px;">Receipt</button>'
                     : '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')">View</button>'
                 ) + ' <button class="btn btn-outline btn-sm" onclick="window.PKL.deleteBooking(\'' + r.id + '\')" style="margin-left:4px;color:var(--gray-400);">Delete</button></td>' +
             '</tr>';
@@ -1883,20 +1883,15 @@
             }
         },
 
-        viewReceipt(id) {
+        async viewReceipt(id) {
             const res = Data.getReservations().find(r => r.id === id);
             if (!res) return;
             const player = Data.getPlayer(res.playerId);
             const ss = [...res.slots].sort((a, b) => a.hour - b.hour);
-            let receiptHtml = '';
-            if (res.receiptImage && res.receiptImage.indexOf('data:image/') === 0) {
-                receiptHtml = '<div style="margin-top:12px; text-align:center;"><img src="' + res.receiptImage + '" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--gray-200);" alt="Payment Receipt"></div>';
-            } else {
-                receiptHtml = '<p class="text-muted text-center" style="margin-top:12px;">No receipt uploaded</p>';
-            }
             const statusBadge = res.paymentStatus === 'paid' ? '<span class="badge badge-success">Approved</span>'
                 : res.paymentStatus === 'pending' ? '<span class="badge badge-warning">Pending</span>'
                 : '<span class="badge badge-danger">Rejected</span>';
+            var receiptHtml = '<p class="text-muted text-center" style="margin-top:12px;">Loading receipt...</p>';
             UI.showModal('Booking Details', `
                 <div class="summary-row"><span class="label">Confirmation</span><span class="value"><code>${res.confirmationCode}</code></span></div>
                 <div class="summary-row"><span class="label">Player</span><span class="value">${player ? escapeHtml(player.fullName) : 'Unknown'}</span></div>
@@ -1908,13 +1903,25 @@
                 <div class="summary-row"><span class="label">Payment</span><span class="value">${res.paymentMethod.toUpperCase()}</span></div>
                 <div class="summary-row"><span class="label">Status</span><span class="value">${statusBadge}</span></div>
                 <h4 style="margin-top:16px; font-size:14px; font-weight:700;">Payment Receipt</h4>
-                ${receiptHtml}
+                <div id="receiptContainer">${receiptHtml}</div>
             `, res.paymentStatus === 'pending'
                 ? `<button class="btn btn-success" onclick="window.PKL.approveBooking('${res.id}'); window.PKL.closeModal();">Approve</button>
                    <button class="btn btn-danger" onclick="window.PKL.rejectBooking('${res.id}'); window.PKL.closeModal();">Reject</button>
                    <button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
                 : `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
             );
+            try {
+                var full = await Data._api('reservations?id=' + id);
+                var container = document.getElementById('receiptContainer');
+                if (container && full && full.receiptImage && full.receiptImage.indexOf('data:image/') === 0) {
+                    container.innerHTML = '<div style="margin-top:12px; text-align:center;"><img src="' + full.receiptImage + '" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--gray-200);" alt="Payment Receipt"></div>';
+                } else if (container) {
+                    container.innerHTML = '<p class="text-muted text-center" style="margin-top:12px;">No receipt uploaded</p>';
+                }
+            } catch (err) {
+                var container = document.getElementById('receiptContainer');
+                if (container) container.innerHTML = '<p class="text-muted text-center" style="margin-top:12px;">Could not load receipt</p>';
+            }
         },
 
         adminViewBooking(id) {
