@@ -1500,7 +1500,7 @@
     }
 
     function renderAdminReports(content) {
-        const allRes = Data.getReservations().filter(r => r.paymentStatus === 'paid');
+        const allRes = Data.getReservations().filter(r => r.paymentStatus === 'paid' || r.paymentStatus === 'confirmed');
         const today = todayStr();
 
         const todayRes = allRes.filter(r => r.date === today);
