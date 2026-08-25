@@ -442,8 +442,7 @@
         var gridCols = [];
         CONFIG.courts.forEach(function(c) {
             if (c.type === 'dual') {
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: 'Pickleball', rate: '&#8369;300/hr' });
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;300/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'dual', label: 'Pickleball / Badminton', rate: '&#8369;300/hr' });
             } else if (c.type === 'table-tennis') {
                 gridCols.push({ courtId: c.id, name: c.name, sport: 'table-tennis', label: c.label, rate: '&#8369;120-200/hr' });
             } else if (c.type === 'badminton') {
@@ -472,7 +471,8 @@
                 var isPast = isToday && h < nowHour;
                 var booked = Data.isSlotBooked(col.courtId, dateStr, h);
                 var blocked = Data.isSlotBlocked(col.courtId, dateStr, h);
-                var isSelected = booking.court === col.courtId && booking.sport === col.sport && booking.date === dateStr && booking.slots.indexOf(h) >= 0;
+                var sportMatch = booking.sport === col.sport || (col.sport === 'dual' && (booking.sport === 'pickleball' || booking.sport === 'badminton'));
+                var isSelected = booking.court === col.courtId && sportMatch && booking.date === dateStr && booking.slots.indexOf(h) >= 0;
                 var isPending = false;
                 if (booked) {
                     var res = Data.getReservationsByCourtAndDate(col.courtId, dateStr).find(function(r) {
@@ -541,7 +541,7 @@
                     '<div class="rate-list">' +
                         '<div class="rate-row"><span>Court 1 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Court 2 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
-                        '<div class="rate-row"><span>Court 3 <small>PB &#8369;300 / Badminton &#8369;300</small></span><span>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 3 <small>Pickleball / Badminton</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 1 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 2 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                     '</div>' +
@@ -2084,6 +2084,21 @@
             if (dateStr === todayStr() && hour < new Date().getHours()) {
                 UI.toast('This time slot has already passed', 'error');
                 return;
+            }
+            var courtCfg = getCourtConfig(courtId);
+            if (sport === 'dual' && courtCfg && courtCfg.type === 'dual') {
+                if (State.booking.court === courtId && State.booking.date === dateStr && State.booking.sport) {
+                    sport = State.booking.sport;
+                } else {
+                    UI.modal(
+                        '<h3 style="margin-bottom:16px;">Select Sport</h3>' +
+                        '<div style="display:flex;gap:12px;">' +
+                            '<button class="btn btn-primary" style="flex:1;" onclick="window.PKL.closeModal();window.PKL.gridSelectSlot(' + courtId + ',' + hour + ',\'pickleball\')">Pickleball</button>' +
+                            '<button class="btn btn-primary" style="flex:1;" onclick="window.PKL.closeModal();window.PKL.gridSelectSlot(' + courtId + ',' + hour + ',\'badminton\')">Badminton</button>' +
+                        '</div>'
+                    );
+                    return;
+                }
             }
             if (State.booking.court !== courtId || State.booking.date !== dateStr || State.booking.sport !== sport) {
                 State.booking.court = courtId;
