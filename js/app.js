@@ -599,11 +599,11 @@
 
     function renderPhotosTab(content) {
         var photos = [
-            { src: 'img/court (2).jpg', caption: 'Pickleball Court' },
-            { src: 'img/court (3).jpg', caption: 'Pickleball & Badminton Courts - Night View' },
-            { src: 'img/court (1).jpg', caption: 'Courts & Badminton Area' },
-            { src: 'img/silica sand (1).jpg', caption: 'Court Surface' },
-            { src: 'img/silica sand (2).jpg', caption: 'Court Surface Detail' }
+            { src: 'img/court (2).jpg', caption: 'Court' },
+            { src: 'img/court (3).jpg', caption: 'Court' },
+            { src: 'img/court (1).jpg', caption: 'Court' },
+            { src: 'img/silica sand (1).jpg', caption: 'Court' },
+            { src: 'img/silica sand (2).jpg', caption: 'Court' }
         ];
         content.innerHTML = '<h3 style="font-size:20px;font-weight:700;margin-bottom:16px;">Photos</h3>' +
             '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:24px;">' +
@@ -2070,7 +2070,7 @@
         },
 
         viewPhoto(src) {
-            UI.modal('<div style="text-align:center;"><img src="' + src + '" style="max-width:100%;max-height:80vh;border-radius:8px;" alt="Court photo"></div>');
+            UI.showModal('Photo', '<div style="text-align:center;"><img src="' + src + '" style="max-width:100%;max-height:80vh;border-radius:8px;" alt="Court photo"></div>');
         },
 
         homeTab(tab) {
@@ -2090,8 +2090,7 @@
                 if (State.booking.court === courtId && State.booking.date === dateStr && State.booking.sport) {
                     sport = State.booking.sport;
                 } else {
-                    UI.modal(
-                        '<h3 style="margin-bottom:16px;">Select Sport</h3>' +
+                    UI.showModal('Select Sport',
                         '<div style="display:flex;gap:12px;">' +
                             '<button class="btn btn-primary" style="flex:1;" onclick="window.PKL.closeModal();window.PKL.gridSelectSlot(' + courtId + ',' + hour + ',\'pickleball\')">Pickleball</button>' +
                             '<button class="btn btn-primary" style="flex:1;" onclick="window.PKL.closeModal();window.PKL.gridSelectSlot(' + courtId + ',' + hour + ',\'badminton\')">Badminton</button>' +
