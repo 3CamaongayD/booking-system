@@ -556,7 +556,7 @@
             '<div class="about-col">' +
                 '<div class="about-card"><h3>&#128205; Find Us</h3>' +
                     '<div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="200" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>' +
-                    '<div class="contact-info"><p>&#128205; Kepler Insight School of Science and Arts, Liloan, Cebu</p>' +
+                    '<div class="contact-info"><p>&#128205; Kepler Insight School of Science and Arts, Danao City, Cebu</p>' +
                     '<a href="https://maps.app.goo.gl/S8fPwLjrYJn6UCsZA" target="_blank" rel="noopener" class="btn btn-outline btn-sm mt-1">&#128204; Directions</a></div>' +
                 '</div>' +
                 '<div class="about-card"><h3>&#127970; Facilities</h3>' +
@@ -598,10 +598,22 @@
     }
 
     function renderPhotosTab(content) {
+        var photos = [
+            { src: 'img/court (2).jpg', caption: 'Pickleball Court' },
+            { src: 'img/court (3).jpg', caption: 'Courts Overview' },
+            { src: 'img/court (1).jpg', caption: 'Courts & Badminton Area' },
+            { src: 'img/silica sand (1).jpg', caption: 'Court Surface' },
+            { src: 'img/silica sand (2).jpg', caption: 'Court Surface Detail' }
+        ];
         content.innerHTML = '<h3 style="font-size:20px;font-weight:700;margin-bottom:16px;">Photos</h3>' +
-            '<div class="photos-placeholder"><div class="empty-state" style="padding:60px 20px;">' +
-                '<div class="empty-icon">&#128247;</div><h3>Photos Coming Soon</h3><p>Venue photos will be added here.</p>' +
-            '</div></div>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:24px;">' +
+            photos.map(function(p) {
+                return '<div style="border-radius:12px;overflow:hidden;cursor:pointer;" onclick="window.PKL.viewPhoto(this.querySelector(\'img\').src)">' +
+                    '<img src="' + p.src + '" alt="' + p.caption + '" loading="lazy" style="width:100%;height:220px;object-fit:cover;display:block;">' +
+                    '<div style="padding:8px 12px;background:var(--gray-50);font-size:13px;font-weight:500;color:var(--gray-600);">' + p.caption + '</div>' +
+                '</div>';
+            }).join('') +
+            '</div>' +
             '<div class="about-card mt-3"><h3>&#9888;&#65039; Court Rules &amp; Guidelines</h3>' +
                 '<div class="rules-grid">' +
                     '<div class="rule-item"><span class="rule-icon">&#128685;</span><div><strong>No Smoking</strong><p>Smoking and vaping are strictly prohibited in all court areas and facilities.</p></div></div>' +
@@ -2055,6 +2067,10 @@
             State.booking.slots = [];
             var content = document.getElementById('homeTabContent');
             if (content) renderBookTab(content);
+        },
+
+        viewPhoto(src) {
+            UI.modal('<div style="text-align:center;"><img src="' + src + '" style="max-width:100%;max-height:80vh;border-radius:8px;" alt="Court photo"></div>');
         },
 
         homeTab(tab) {
