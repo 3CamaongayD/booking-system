@@ -20,7 +20,7 @@
         },
         rates: {
             pickleball: 300,
-            badminton: 250,
+            badminton: 300,
             peakStart: 18,
             tableTennisPeak: 200,
             tableTennisOffPeak: 120
@@ -443,11 +443,11 @@
         CONFIG.courts.forEach(function(c) {
             if (c.type === 'dual') {
                 gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: 'Pickleball', rate: '&#8369;300/hr' });
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;250/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: 'Badminton', rate: '&#8369;300/hr' });
             } else if (c.type === 'table-tennis') {
                 gridCols.push({ courtId: c.id, name: c.name, sport: 'table-tennis', label: c.label, rate: '&#8369;120-200/hr' });
             } else if (c.type === 'badminton') {
-                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: c.label, rate: '&#8369;250/hr' });
+                gridCols.push({ courtId: c.id, name: c.name, sport: 'badminton', label: c.label, rate: '&#8369;300/hr' });
             } else {
                 gridCols.push({ courtId: c.id, name: c.name, sport: 'pickleball', label: c.label, rate: '&#8369;300/hr' });
             }
@@ -541,7 +541,7 @@
                     '<div class="rate-list">' +
                         '<div class="rate-row"><span>Court 1 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Court 2 <small>Pickleball</small></span><span><strong>&#8369;300</strong>/hr</span></div>' +
-                        '<div class="rate-row"><span>Court 3 <small>PB &#8369;300 / Badminton &#8369;250</small></span><span>/hr</span></div>' +
+                        '<div class="rate-row"><span>Court 3 <small>PB &#8369;300 / Badminton &#8369;300</small></span><span>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 1 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                         '<div class="rate-row"><span>Table 2 <small>Table Tennis</small></span><span><strong>&#8369;120-200</strong>/hr</span></div>' +
                     '</div>' +
@@ -576,7 +576,7 @@
         html += '<div class="about-card mt-3"><h3>&#10067; Frequently Asked Questions</h3>' +
             '<div class="faq-list" style="max-width:100%;">' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I book a court or table?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Select your preferred facility from the Book tab, pick a date, choose your time slots, then proceed to checkout. Enter your details, select a payment method, and confirm your booking.</p></div></div>' +
-                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: &#8369;300/hr. Badminton: &#8369;250/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr (peak hours are 6 PM onwards).</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: &#8369;300/hr. Badminton: &#8369;300/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr (peak hours are 6 PM onwards).</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What payment methods are accepted?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>We accept GCash and Maribank. Send payment to the number provided at checkout, then upload your receipt screenshot for verification.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact us at 0931 203 2087 or email booking@keplerinsightschool.com. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What happens if I arrive late?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time.</p></div></div>' +
@@ -600,7 +600,7 @@
     function renderPhotosTab(content) {
         var photos = [
             { src: 'img/court (2).jpg', caption: 'Pickleball Court' },
-            { src: 'img/court (3).jpg', caption: 'Courts Overview' },
+            { src: 'img/court (3).jpg', caption: 'Pickleball & Badminton Courts - Night View' },
             { src: 'img/court (1).jpg', caption: 'Courts & Badminton Area' },
             { src: 'img/silica sand (1).jpg', caption: 'Court Surface' },
             { src: 'img/silica sand (2).jpg', caption: 'Court Surface Detail' }
@@ -1173,7 +1173,7 @@
             },
             {
                 q: 'How much does it cost to play?',
-                a: 'Pickleball: ₱300/hr. Badminton: ₱250/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr (peak hours are 6 PM onwards).'
+                a: 'Pickleball: ₱300/hr. Badminton: ₱300/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr (peak hours are 6 PM onwards).'
             },
             {
                 q: 'Can I book multiple time slots at once?',
