@@ -1155,7 +1155,7 @@ tbody tr:hover { background: var(--gray-50); }
 
 .schedule-grid {
     display: grid;
-    grid-template-columns: 80px repeat(3, 1fr);
+    grid-template-columns: 80px repeat(5, 1fr);
     gap: 2px;
     background: var(--gray-200);
     border-radius: var(--radius);
