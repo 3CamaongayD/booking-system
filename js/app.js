@@ -294,6 +294,16 @@
             this._writing = false;
         },
 
+        async updateReservation(id, updates) {
+            this._writing = true;
+            var idx = this._reservations.findIndex(function(r) { return r.id === id; });
+            if (idx >= 0) {
+                Object.assign(this._reservations[idx], updates);
+                await this._api('reservations', 'PATCH', Object.assign({ id: id }, updates));
+            }
+            this._writing = false;
+        },
+
         async deleteReservation(id) {
             this._writing = true;
             this._reservations = this._reservations.filter(function(r) { return r.id !== id; });
@@ -1923,8 +1933,10 @@
             `, res.paymentStatus === 'pending'
                 ? `<button class="btn btn-success" onclick="window.PKL.approveBooking('${res.id}'); window.PKL.closeModal();">Approve</button>
                    <button class="btn btn-danger" onclick="window.PKL.rejectBooking('${res.id}'); window.PKL.closeModal();">Reject</button>
+                   <button class="btn btn-primary" onclick="window.PKL.closeModal();window.PKL.adminEditBooking('${res.id}')">Edit</button>
                    <button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
-                : `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
+                : `<button class="btn btn-primary" onclick="window.PKL.closeModal();window.PKL.adminEditBooking('${res.id}')">Edit</button>
+                   <button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`
             );
             try {
                 var full = await Data._api('reservations?id=' + id);
@@ -1954,7 +1966,140 @@
                 <div class="summary-row"><span class="label">Amount</span><span class="value">${formatCurrency(res.totalAmount)}</span></div>
                 <div class="summary-row"><span class="label">Payment</span><span class="value">${res.paymentMethod.toUpperCase()}</span></div>
                 <div class="summary-row"><span class="label">Status</span><span class="value"><span class="badge ${res.paymentStatus === 'paid' ? 'badge-success' : res.paymentStatus === 'pending' ? 'badge-warning' : 'badge-danger'}">${res.paymentStatus === 'paid' ? 'Approved' : res.paymentStatus === 'pending' ? 'Pending' : res.paymentStatus}</span></span></div>
-            `, `<button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`);
+            `, `<button class="btn btn-primary" onclick="window.PKL.closeModal();window.PKL.adminEditBooking('${res.id}')">Edit</button>
+                <button class="btn btn-outline" onclick="window.PKL.closeModal()">Close</button>`);
+        },
+
+        adminEditBooking(id) {
+            var res = Data.getReservations().find(function(r) { return r.id === id; });
+            if (!res) return;
+            var player = Data.getPlayer(res.playerId);
+            var editDate = res.date;
+            var editCourtId = res.courtId;
+            var editSport = res.sport || 'pickleball';
+            var editSlots = res.slots.map(function(s) { return s.hour; });
+
+            function renderEditModal() {
+                var hours = getAvailableHours(editDate);
+                var courtOptions = CONFIG.courts.map(function(c) {
+                    var sel = c.id === editCourtId ? ' selected' : '';
+                    return '<option value="' + c.id + '"' + sel + '>' + c.name + ' (' + c.label + ')</option>';
+                }).join('');
+                var courtCfg = getCourtConfig(editCourtId);
+                var sportHtml = '';
+                if (courtCfg && courtCfg.type === 'dual') {
+                    sportHtml = '<div class="summary-row"><span class="label">Sport</span><span class="value">' +
+                        '<select id="editSport" class="form-control" style="width:auto;display:inline-block;" onchange="window.PKL._editSport=this.value">' +
+                            '<option value="pickleball"' + (editSport === 'pickleball' ? ' selected' : '') + '>Pickleball</option>' +
+                            '<option value="badminton"' + (editSport === 'badminton' ? ' selected' : '') + '>Badminton</option>' +
+                        '</select></span></div>';
+                }
+                var slotsHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:8px;">';
+                hours.forEach(function(h) {
+                    var otherBooked = Data.getReservationsByCourtAndDate(editCourtId, editDate).some(function(r) {
+                        return r.id !== id && r.slots.some(function(s) { return s.hour === h; });
+                    });
+                    var blocked = Data.isSlotBlocked(editCourtId, editDate, h);
+                    var selected = editSlots.indexOf(h) >= 0;
+                    if (blocked || otherBooked) {
+                        slotsHtml += '<div style="padding:8px;border-radius:8px;text-align:center;font-size:13px;background:var(--gray-100);color:var(--gray-400);">' + formatHour(h) + ' ' + (blocked ? 'Blocked' : 'Taken') + '</div>';
+                    } else {
+                        var bg = selected ? 'var(--crimson)' : 'var(--gray-50)';
+                        var color = selected ? '#fff' : 'var(--gray-700)';
+                        slotsHtml += '<div style="padding:8px;border-radius:8px;text-align:center;font-size:13px;cursor:pointer;font-weight:' + (selected ? '600' : '400') + ';background:' + bg + ';color:' + color + ';border:1px solid ' + (selected ? 'var(--crimson)' : 'var(--gray-200)') + ';" onclick="window.PKL._toggleEditSlot(' + h + ')">' + formatHour(h) + '</div>';
+                    }
+                });
+                slotsHtml += '</div>';
+
+                var total = editSlots.length * getRate(editSlots[0] || hours[0], editCourtId, editSport);
+                UI.showModal('Edit Booking', `
+                    <div class="summary-row"><span class="label">Player</span><span class="value">${player ? escapeHtml(player.fullName) : 'Unknown'}</span></div>
+                    <div class="summary-row"><span class="label">Date</span><span class="value">
+                        <input type="date" id="editDate" class="form-control" style="width:auto;display:inline-block;" value="${editDate}" onchange="window.PKL._editDateChange(this.value)">
+                    </span></div>
+                    <div class="summary-row"><span class="label">Court</span><span class="value">
+                        <select id="editCourt" class="form-control" style="width:auto;display:inline-block;" onchange="window.PKL._editCourtChange(parseInt(this.value))">
+                            ${courtOptions}
+                        </select>
+                    </span></div>
+                    ${sportHtml}
+                    <h4 style="margin-top:16px;font-size:14px;font-weight:700;">Time Slots</h4>
+                    <p style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">Tap to select/deselect slots</p>
+                    ${slotsHtml}
+                    <div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-weight:600;">Total: ${formatCurrency(total)}</span>
+                        <span style="font-size:13px;color:var(--gray-500);">${editSlots.length} slot${editSlots.length !== 1 ? 's' : ''}</span>
+                    </div>
+                `, `<button class="btn btn-primary" onclick="window.PKL._saveEditBooking('${id}')">Save Changes</button>
+                    <button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>`);
+            }
+
+            window.PKL._editDate = editDate;
+            window.PKL._editCourtId = editCourtId;
+            window.PKL._editSport = editSport;
+            window.PKL._editSlots = editSlots;
+            window.PKL._editResId = id;
+
+            window.PKL._toggleEditSlot = function(h) {
+                var idx = editSlots.indexOf(h);
+                if (idx >= 0) editSlots.splice(idx, 1);
+                else editSlots.push(h);
+                window.PKL._editSlots = editSlots;
+                renderEditModal();
+            };
+            window.PKL._editDateChange = function(val) {
+                editDate = val;
+                editSlots = [];
+                window.PKL._editDate = val;
+                window.PKL._editSlots = editSlots;
+                renderEditModal();
+            };
+            window.PKL._editCourtChange = function(val) {
+                editCourtId = val;
+                editSlots = [];
+                var cfg = getCourtConfig(val);
+                if (cfg && cfg.type === 'dual') editSport = 'pickleball';
+                else if (cfg && cfg.type === 'table-tennis') editSport = 'table-tennis';
+                else editSport = 'pickleball';
+                window.PKL._editCourtId = val;
+                window.PKL._editSport = editSport;
+                window.PKL._editSlots = editSlots;
+                renderEditModal();
+            };
+
+            renderEditModal();
+        },
+
+        async _saveEditBooking(id) {
+            var slots = (window.PKL._editSlots || []);
+            if (slots.length === 0) {
+                UI.toast('Please select at least one time slot', 'error');
+                return;
+            }
+            var date = window.PKL._editDate;
+            var courtId = window.PKL._editCourtId;
+            var sport = window.PKL._editSport;
+            var formattedSlots = slots.map(function(h) { return { hour: h, rate: getRate(h, courtId, sport) }; });
+            var totalAmount = 0;
+            formattedSlots.forEach(function(s) { totalAmount += s.rate; });
+            try {
+                await Data.updateReservation(id, {
+                    date: date,
+                    courtId: courtId,
+                    sport: sport,
+                    slots: formattedSlots,
+                    totalAmount: totalAmount
+                });
+                UI.closeModal();
+                UI.toast('Booking updated successfully', 'success');
+                var content = document.getElementById('adminTabContent');
+                if (content) {
+                    if (State.admin.activeTab === 'schedule') renderAdminSchedule(content);
+                    else renderAdminBookings(content);
+                }
+            } catch (err) {
+                UI.toast('Failed to update booking: ' + err.message, 'error');
+            }
         },
 
         async addOverride() {

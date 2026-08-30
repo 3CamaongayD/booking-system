@@ -32,13 +32,25 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PATCH') {
-      const { id, paymentStatus, totalAmount } = req.body;
+      const { id, paymentStatus, totalAmount, date, courtId, sport, slots } = req.body;
       if (!id) return res.status(400).json({ error: 'Missing id' });
       if (paymentStatus) {
         await sql`UPDATE reservations SET payment_status = ${paymentStatus} WHERE id = ${id}`;
       }
       if (totalAmount !== undefined) {
         await sql`UPDATE reservations SET total_amount = ${totalAmount} WHERE id = ${id}`;
+      }
+      if (date !== undefined) {
+        await sql`UPDATE reservations SET date = ${date} WHERE id = ${id}`;
+      }
+      if (courtId !== undefined) {
+        await sql`UPDATE reservations SET court_id = ${courtId} WHERE id = ${id}`;
+      }
+      if (sport !== undefined) {
+        await sql`UPDATE reservations SET sport = ${sport} WHERE id = ${id}`;
+      }
+      if (slots !== undefined) {
+        await sql`UPDATE reservations SET slots = ${JSON.stringify(slots)} WHERE id = ${id}`;
       }
       return res.status(200).json({ success: true });
     }
