@@ -1450,7 +1450,7 @@
                     <div class="form-group">
                         <label class="required">Hours</label>
                         <div id="overrideHours" style="display:flex; flex-wrap:wrap; gap:6px;">
-                            ${Array.from({ length: 11 }, (_, i) => i + 13).map(h => `<label style="display:flex; align-items:center; gap:4px; font-weight:400; cursor:pointer; min-width:140px;"><input type="checkbox" value="${h}" style="width:16px; height:16px;"> ${formatHour(h)} – ${formatHour(h + 1)}</label>`).join('')}
+                            ${Array.from({ length: 8 }, (_, i) => i + 16).map(h => `<label style="display:flex; align-items:center; gap:4px; font-weight:400; cursor:pointer; min-width:140px;"><input type="checkbox" value="${h}" style="width:16px; height:16px;"> ${formatHour(h)} – ${formatHour(h + 1)}</label>`).join('')}
                         </div>
                         <div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=true})">Select All</button> <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#overrideHours input').forEach(function(c){c.checked=false})">Clear</button></div>
                     </div>
@@ -1660,7 +1660,19 @@
             if (!State.currentPlayer) {
                 UI.toast('Please register or log in first', 'warning');
             }
-            location.hash = '#checkout';
+            UI.showModal('Facility Risk Management and Liability',
+                '<div style="max-height:60vh;overflow-y:auto;font-size:13px;line-height:1.6;color:var(--gray-700);">' +
+                    '<h4 style="font-size:14px;font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px;">Pickleball Court Rental Liability Waiver and Release of Claims</h4>' +
+                    '<p style="margin-bottom:12px;">By completing your booking, submitting payment, or entering the court premises, you agree to the following terms:</p>' +
+                    '<p style="margin-bottom:10px;"><strong>1. Facility Rental Only:</strong> You acknowledge that Kepler Insight School (“Management”) is strictly providing access to the court facilities on a venue-rental basis. Management does not provide supervision, instruction, or medical personnel on site.</p>' +
+                    '<p style="margin-bottom:10px;"><strong>2. Assumption of Risk:</strong> Playing pickleball involves inherent risks, including but not limited to slip and falls, collisions, muscle strains, eye injuries, fractures, and other personal injuries. You voluntarily assume all risks, hazards, and dangers arising from or related to your use of the court and surrounding facilities.</p>' +
+                    '<p style="margin-bottom:10px;"><strong>3. Release &amp; Hold Harmless:</strong> You agree that Kepler Insight School, its owners, staff, and representatives shall not be held liable for any personal injury, illness, loss, or property damage sustained while on the premises, regardless of how it occurs.</p>' +
+                    '<p style="margin-bottom:10px;"><strong>4. Player Responsibility:</strong> Players are responsible for ensuring they are physically fit to play, wearing proper footwear, inspecting the court area before play, and bringing their own protective gear (e.g., eye protection).</p>' +
+                    '<p style="margin-top:14px;font-style:italic;color:var(--gray-500);">By proceeding with your reservation, you acknowledge that you have read, understood, and voluntarily agreed to this waiver.</p>' +
+                '</div>',
+                '<button class="btn btn-primary" onclick="window.PKL.closeModal();location.hash=\'#checkout\';">I Agree &amp; Proceed</button>' +
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>'
+            );
         },
 
         selectPayment(method, el) {
