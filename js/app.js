@@ -982,9 +982,16 @@
 
                             <div class="pay-info-box mt-2">
                                 <p><strong>Send ${formatCurrency(total)} to:</strong></p>
-                                <div class="pay-detail">
+                                <div class="pay-detail" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                     <span class="pay-number" id="payNumber">0931 203 2087</span>
+                                    <button class="btn btn-outline btn-sm" onclick="window.PKL.copyText(document.getElementById('payNumber').textContent,'Account number copied!')" style="font-size:11px;padding:3px 10px;">Copy Number</button>
+                                </div>
+                                <div style="margin-top:4px;">
                                     <span class="pay-name" id="payName">Don Melton C. (GCash)</span>
+                                </div>
+                                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+                                    <span style="font-size:14px;font-weight:600;color:var(--crimson);" id="payAmount">${formatCurrency(total)}</span>
+                                    <button class="btn btn-outline btn-sm" onclick="window.PKL.copyText('${total}','Amount copied!')" style="font-size:11px;padding:3px 10px;">Copy Amount</button>
                                 </div>
                                 <p class="pay-note">Send payment to the number above, then upload your receipt screenshot below.</p>
                             </div>
@@ -2000,6 +2007,14 @@
         },
 
         closeModal() { UI.closeModal(); },
+
+        copyText(text, msg) {
+            navigator.clipboard.writeText(text.replace(/[^\d]/g, '')).then(function() {
+                UI.toast(msg || 'Copied!', 'success');
+            }).catch(function() {
+                UI.toast('Could not copy', 'error');
+            });
+        },
 
         // Admin
         adminLogout() {
