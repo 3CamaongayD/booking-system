@@ -989,10 +989,6 @@
                                 <div style="margin-top:4px;">
                                     <span class="pay-name" id="payName">Don Melton C. (GCash)</span>
                                 </div>
-                                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-                                    <span style="font-size:14px;font-weight:600;color:var(--crimson);" id="payAmount">${formatCurrency(total)}</span>
-                                    <button class="btn btn-outline btn-sm" onclick="window.PKL.copyText('${total}','Amount copied!')" style="font-size:11px;padding:3px 10px;">Copy Amount</button>
-                                </div>
                                 <p class="pay-note">Send payment to the number above, then upload your receipt screenshot below.</p>
                             </div>
 
