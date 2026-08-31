@@ -1568,6 +1568,37 @@
         monthRes.forEach(r => { dailyMap[r.date] = (dailyMap[r.date] || 0) + r.totalAmount; });
         var dailyEntries = Object.keys(dailyMap).sort();
 
+        var monthlyData = [];
+        var monthlyMap = {};
+        allRes.forEach(r => {
+            var m = r.date.slice(0, 7);
+            monthlyMap[m] = (monthlyMap[m] || 0) + r.totalAmount;
+        });
+        var allMonths = Object.keys(monthlyMap).sort();
+        if (allMonths.length > 0) {
+            var first = new Date(allMonths[0] + '-01');
+            var last = new Date(allMonths[allMonths.length - 1] + '-01');
+            var cur = new Date(first);
+            while (cur <= last) {
+                var key = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
+                monthlyData.push({ month: key, label: cur.toLocaleDateString('en-US', { month: 'short' }), revenue: monthlyMap[key] || 0 });
+                cur.setMonth(cur.getMonth() + 1);
+            }
+        }
+        var maxMonthly = Math.max.apply(null, monthlyData.map(m => m.revenue).concat([1]));
+
+        var weeklyData = [];
+        var weeklyMap = {};
+        var wkDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        weekRes.forEach(r => {
+            var dayIdx = new Date(r.date + 'T00:00:00').getDay();
+            weeklyMap[dayIdx] = (weeklyMap[dayIdx] || 0) + r.totalAmount;
+        });
+        for (var di = 0; di < 7; di++) {
+            weeklyData.push({ label: wkDays[di], revenue: weeklyMap[di] || 0 });
+        }
+        var maxWeekly = Math.max.apply(null, weeklyData.map(d => d.revenue).concat([1]));
+
         content.innerHTML = `
             <div class="report-grid">
                 <div class="report-card">
@@ -1615,7 +1646,38 @@
                 </div>
             </div>
 
-            <div class="card mb-3" style="margin-top:20px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;">
+                <div class="card" style="margin:0;">
+                    <div class="card-header">Monthly Revenue</div>
+                    <div style="display:flex;align-items:flex-end;gap:4px;height:180px;padding:16px 8px 0;">
+                        ${monthlyData.map(m => {
+                            var pct = maxMonthly > 0 ? Math.round(m.revenue / maxMonthly * 100) : 0;
+                            var isCurrentMonth = m.month === monthStr;
+                            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">' +
+                                '<span style="font-size:10px;font-weight:600;color:var(--gray-600);">' + (m.revenue > 0 ? '₱' + (m.revenue / 1000).toFixed(1) + 'k' : '') + '</span>' +
+                                '<div style="width:100%;max-width:48px;height:' + Math.max(pct, 4) + '%;background:' + (isCurrentMonth ? 'var(--crimson)' : 'rgba(204,34,41,0.25)') + ';border-radius:6px 6px 0 0;min-height:4px;"></div>' +
+                                '<span style="font-size:11px;color:var(--gray-500);font-weight:' + (isCurrentMonth ? '700' : '400') + ';">' + m.label + '</span>' +
+                            '</div>';
+                        }).join('')}
+                    </div>
+                </div>
+                <div class="card" style="margin:0;">
+                    <div class="card-header">This Week</div>
+                    <div style="display:flex;align-items:flex-end;gap:4px;height:180px;padding:16px 8px 0;">
+                        ${weeklyData.map((d, i) => {
+                            var pct = maxWeekly > 0 ? Math.round(d.revenue / maxWeekly * 100) : 0;
+                            var isToday = new Date().getDay() === i;
+                            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">' +
+                                '<span style="font-size:10px;font-weight:600;color:var(--gray-600);">' + (d.revenue > 0 ? '₱' + (d.revenue >= 1000 ? (d.revenue / 1000).toFixed(1) + 'k' : d.revenue) : '') + '</span>' +
+                                '<div style="width:100%;max-width:48px;height:' + Math.max(pct, 4) + '%;background:' + (isToday ? 'var(--crimson)' : 'rgba(204,34,41,0.25)') + ';border-radius:6px 6px 0 0;min-height:4px;"></div>' +
+                                '<span style="font-size:11px;color:var(--gray-500);font-weight:' + (isToday ? '700' : '400') + ';">' + d.label + '</span>' +
+                            '</div>';
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3" style="margin-top:16px;">
                 <div class="card-header">Revenue by Payment Method</div>
                 <div class="table-container">
                     <table>
