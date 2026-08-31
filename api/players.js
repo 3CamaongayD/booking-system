@@ -1,9 +1,8 @@
 const { getDb } = require('./db');
+const { checkAdmin, setCors } = require('./_auth');
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const sql = getDb();
@@ -21,6 +20,9 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const { id, fullName, email, contactNumber, emergencyContact } = req.body;
+      if (!id || !fullName || !email) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
       const rows = await sql`
         INSERT INTO players (id, full_name, email, contact_number, emergency_contact)
         VALUES (${id}, ${fullName}, ${email}, ${contactNumber || ''}, ${emergencyContact || ''})
@@ -33,7 +35,11 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PUT') {
+      if (!checkAdmin(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const { id, fullName, contactNumber } = req.body;
+      if (!id) return res.status(400).json({ error: 'Missing id' });
       await sql`
         UPDATE players SET full_name = ${fullName}, contact_number = ${contactNumber || ''}
         WHERE id = ${id}
@@ -44,6 +50,6 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Players API error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };

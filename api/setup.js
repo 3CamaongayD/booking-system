@@ -1,8 +1,15 @@
 const { getDb } = require('./db');
+const { checkAdmin, setCors } = require('./_auth');
 
 module.exports = async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
+  }
+
+  if (!checkAdmin(req)) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const sql = getDb();
@@ -53,6 +60,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ success: true, message: 'Database tables created' });
   } catch (error) {
     console.error('Setup error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };

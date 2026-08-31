@@ -25,7 +25,7 @@
             tableTennisPeak: 200,
             tableTennisOffPeak: 120
         },
-        adminPassword: 'RelpicKle2026!'
+        adminPassword: null
     };
 
     // --- State ---
@@ -169,6 +169,8 @@
 
         async _api(endpoint, method, body) {
             var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+            var token = sessionStorage.getItem('pkl_adminToken');
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             if (body) opts.body = JSON.stringify(body);
             var resp = await fetch('/api/' + endpoint, opts);
             if (!resp.ok) throw new Error('API error: ' + resp.status);
@@ -1273,15 +1275,26 @@
             </div>
         `;
 
-        document.getElementById('adminLoginForm').addEventListener('submit', function (e) {
+        document.getElementById('adminLoginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
             const pass = document.getElementById('adminPass').value;
-            if (pass === CONFIG.adminPassword) {
-                State.admin.loggedIn = true;
-                UI.toast('Admin access granted', 'success');
-                renderAdmin(container);
-            } else {
-                UI.toast('Incorrect password', 'error');
+            try {
+                var resp = await fetch('/api/admin-auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pass })
+                });
+                var result = await resp.json();
+                if (result.valid) {
+                    sessionStorage.setItem('pkl_adminToken', pass);
+                    State.admin.loggedIn = true;
+                    UI.toast('Admin access granted', 'success');
+                    renderAdmin(container);
+                } else {
+                    UI.toast('Incorrect password', 'error');
+                }
+            } catch (err) {
+                UI.toast('Authentication failed', 'error');
             }
         });
     }
@@ -1841,7 +1854,7 @@
                     payNumber.textContent = '0931 203 2087';
                     payName.textContent = 'Don Melton C. (GCash)';
                 } else if (method === 'maribank') {
-                    payNumber.textContent = '1073 021 0780';
+                    payNumber.textContent = '10730210780';
                     payName.textContent = 'Don Melton Camaongay (MariBank)';
                 }
             }
@@ -2015,6 +2028,7 @@
         // Admin
         adminLogout() {
             State.admin.loggedIn = false;
+            sessionStorage.removeItem('pkl_adminToken');
             handleRoute();
         },
 

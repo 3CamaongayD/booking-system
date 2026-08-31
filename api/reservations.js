@@ -1,10 +1,8 @@
 const { getDb } = require('./db');
+const { checkAdmin, setCors } = require('./_auth');
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const sql = getDb();
@@ -23,6 +21,24 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const r = req.body;
+      if (!r.id || !r.confirmationCode || !r.playerId || !r.courtId || !r.date || !r.slots) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      if (![1, 2, 3, 4, 5].includes(r.courtId)) {
+        return res.status(400).json({ error: 'Invalid court' });
+      }
+      if (!['pickleball', 'badminton', 'table-tennis'].includes(r.sport || 'pickleball')) {
+        return res.status(400).json({ error: 'Invalid sport' });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) {
+        return res.status(400).json({ error: 'Invalid date format' });
+      }
+      if (!Array.isArray(r.slots) || r.slots.length === 0 || r.slots.length > 10) {
+        return res.status(400).json({ error: 'Invalid slots' });
+      }
+      if (typeof r.totalAmount !== 'number' || r.totalAmount <= 0) {
+        return res.status(400).json({ error: 'Invalid amount' });
+      }
       const rows = await sql`
         INSERT INTO reservations (id, confirmation_code, player_id, court_id, sport, date, slots, total_amount, payment_status, payment_method, receipt_image)
         VALUES (${r.id}, ${r.confirmationCode}, ${r.playerId}, ${r.courtId}, ${r.sport || 'pickleball'}, ${r.date}, ${JSON.stringify(r.slots)}, ${r.totalAmount}, ${r.paymentStatus || 'pending'}, ${r.paymentMethod || ''}, ${r.receiptImage || null})
@@ -33,6 +49,12 @@ module.exports = async (req, res) => {
 
     if (req.method === 'PATCH') {
       const { id, paymentStatus, totalAmount, date, courtId, sport, slots, clearReceipts } = req.body;
+
+      const isCancel = paymentStatus === 'cancelled' && !totalAmount && !date && !courtId && !sport && !slots && !clearReceipts;
+      if (!isCancel && !checkAdmin(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
       if (clearReceipts) {
         await sql`UPDATE reservations SET receipt_image = NULL WHERE receipt_image IS NOT NULL`;
         return res.status(200).json({ success: true, message: 'All receipts cleared' });
@@ -60,6 +82,9 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'DELETE') {
+      if (!checkAdmin(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'Missing id' });
       await sql`DELETE FROM reservations WHERE id = ${id}`;
@@ -69,7 +94,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Reservations API error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 

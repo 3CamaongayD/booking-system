@@ -1,3 +1,7 @@
 .claude/
 node_modules/
 *.zip
+DATABASE*.txt
+db-backup*.json
+.env
+.env.*
