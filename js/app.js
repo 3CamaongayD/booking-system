@@ -1539,12 +1539,34 @@
         const monthRes = allRes.filter(r => r.date.startsWith(monthStr));
         const monthRevenue = monthRes.reduce((s, r) => s + r.totalAmount, 0);
 
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+        const lastMonthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const lastMonthRes = allRes.filter(r => r.date.startsWith(lastMonthStr));
+        const lastMonthRevenue = lastMonthRes.reduce((s, r) => s + r.totalAmount, 0);
+
         const totalRevenue = allRes.reduce((s, r) => s + r.totalAmount, 0);
+        const avgBooking = allRes.length > 0 ? Math.round(totalRevenue / allRes.length) : 0;
+        const totalSlots = allRes.reduce((s, r) => s + (r.slots ? r.slots.length : 0), 0);
+
+        const gcashRes = allRes.filter(r => r.paymentMethod === 'gcash');
+        const gcashRevenue = gcashRes.reduce((s, r) => s + r.totalAmount, 0);
+        const maribankRes = allRes.filter(r => r.paymentMethod === 'maribank');
+        const maribankRevenue = maribankRes.reduce((s, r) => s + r.totalAmount, 0);
 
         const courtStats = CONFIG.courts.map(c => {
             const cRes = allRes.filter(r => r.courtId === c.id);
             return { name: c.name, bookings: cRes.length, revenue: cRes.reduce((s, r) => s + r.totalAmount, 0) };
         });
+
+        var hourCounts = {};
+        allRes.forEach(r => { if (r.slots) r.slots.forEach(s => { hourCounts[s.hour] = (hourCounts[s.hour] || 0) + 1; }); });
+        var peakHour = Object.keys(hourCounts).sort((a, b) => hourCounts[b] - hourCounts[a])[0];
+        var peakHourLabel = peakHour ? formatHour(Number(peakHour)) + ' - ' + formatHour(Number(peakHour) + 1) : 'N/A';
+
+        var dailyMap = {};
+        monthRes.forEach(r => { dailyMap[r.date] = (dailyMap[r.date] || 0) + r.totalAmount; });
+        var dailyEntries = Object.keys(dailyMap).sort();
 
         content.innerHTML = `
             <div class="report-grid">
@@ -1564,9 +1586,55 @@
                     <div class="report-sub">${monthRes.length} booking${monthRes.length !== 1 ? 's' : ''}</div>
                 </div>
                 <div class="report-card">
+                    <h4>${lastMonthName}</h4>
+                    <div class="report-value">${formatCurrency(lastMonthRevenue)}</div>
+                    <div class="report-sub">${lastMonthRes.length} booking${lastMonthRes.length !== 1 ? 's' : ''}</div>
+                </div>
+            </div>
+
+            <div class="report-grid" style="margin-top:12px;">
+                <div class="report-card">
                     <h4>All Time Revenue</h4>
                     <div class="report-value crimson">${formatCurrency(totalRevenue)}</div>
-                    <div class="report-sub">${allRes.length} total booking${allRes.length !== 1 ? 's' : ''}</div>
+                    <div class="report-sub">${allRes.length} total bookings</div>
+                </div>
+                <div class="report-card">
+                    <h4>Avg. Booking Value</h4>
+                    <div class="report-value">${formatCurrency(avgBooking)}</div>
+                    <div class="report-sub">${totalSlots} total hours played</div>
+                </div>
+                <div class="report-card">
+                    <h4>Peak Hour</h4>
+                    <div class="report-value" style="font-size:22px;">${peakHourLabel}</div>
+                    <div class="report-sub">${peakHour ? hourCounts[peakHour] + ' bookings' : ''}</div>
+                </div>
+                <div class="report-card">
+                    <h4>Total Players</h4>
+                    <div class="report-value">${Data.getPlayers().length}</div>
+                    <div class="report-sub">registered users</div>
+                </div>
+            </div>
+
+            <div class="card mb-3" style="margin-top:20px;">
+                <div class="card-header">Revenue by Payment Method</div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Method</th><th>Bookings</th><th>Revenue</th><th>Share</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>GCash</strong></td>
+                                <td>${gcashRes.length}</td>
+                                <td>${formatCurrency(gcashRevenue)}</td>
+                                <td>${totalRevenue > 0 ? Math.round(gcashRevenue / totalRevenue * 100) : 0}%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>MariBank</strong></td>
+                                <td>${maribankRes.length}</td>
+                                <td>${formatCurrency(maribankRevenue)}</td>
+                                <td>${totalRevenue > 0 ? Math.round(maribankRevenue / totalRevenue * 100) : 0}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -1574,17 +1642,39 @@
                 <div class="card-header">Revenue by Facility</div>
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>Facility</th><th>Total Bookings</th><th>Total Revenue</th></tr></thead>
+                        <thead><tr><th>Facility</th><th>Bookings</th><th>Revenue</th><th>Share</th></tr></thead>
                         <tbody>
                             ${courtStats.map(c => `<tr>
                                 <td><strong>${c.name}</strong></td>
                                 <td>${c.bookings}</td>
                                 <td>${formatCurrency(c.revenue)}</td>
+                                <td>${totalRevenue > 0 ? Math.round(c.revenue / totalRevenue * 100) : 0}%</td>
                             </tr>`).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            ${dailyEntries.length > 0 ? `
+            <div class="card mb-3">
+                <div class="card-header">Daily Revenue - ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Date</th><th>Revenue</th></tr></thead>
+                        <tbody>
+                            ${dailyEntries.map(d => `<tr>
+                                <td>${formatDate(d)}</td>
+                                <td>${formatCurrency(dailyMap[d])}</td>
+                            </tr>`).join('')}
+                            <tr style="font-weight:700;border-top:2px solid var(--gray-300);">
+                                <td>Total</td>
+                                <td>${formatCurrency(monthRevenue)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            ` : ''}
 
             <div class="card">
                 <div class="card-header">Recent Transactions</div>

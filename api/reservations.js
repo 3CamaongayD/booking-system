@@ -32,7 +32,11 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PATCH') {
-      const { id, paymentStatus, totalAmount, date, courtId, sport, slots } = req.body;
+      const { id, paymentStatus, totalAmount, date, courtId, sport, slots, clearReceipts } = req.body;
+      if (clearReceipts) {
+        await sql`UPDATE reservations SET receipt_image = NULL WHERE receipt_image IS NOT NULL`;
+        return res.status(200).json({ success: true, message: 'All receipts cleared' });
+      }
       if (!id) return res.status(400).json({ error: 'Missing id' });
       if (paymentStatus) {
         await sql`UPDATE reservations SET payment_status = ${paymentStatus} WHERE id = ${id}`;
