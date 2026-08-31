@@ -433,10 +433,10 @@
 
         var dateLabel = dateStr === todayStr() ? 'Today, ' + formatDate(dateStr) : formatDate(dateStr);
         html += '<div class="book-date-nav">';
-        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(-1)">&#9664;</button>';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(-1)">Previous</button>';
         html += '<div class="book-date-label">&#128197; ' + dateLabel + '</div>';
-        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(1)">&#9654;</button>';
-        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateReset()" title="Go to today">&#8634;</button>';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(1)">Next</button>';
+        html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateReset()" title="Go to today">Today</button>';
         html += '</div>';
 
         html += '<p class="book-instruction">Tap a slot to select it, or drag down the column to take several hours in a row.</p>';

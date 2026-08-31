@@ -1549,7 +1549,7 @@ tbody tr:hover { background: var(--gray-50); }
 }
 .book-date-label {
     font-family: var(--font-heading);
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--black);
     flex: 1;
