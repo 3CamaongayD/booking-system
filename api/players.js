@@ -35,9 +35,6 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PUT') {
-      if (!checkAdmin(req)) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
       const { id, fullName, contactNumber } = req.body;
       if (!id) return res.status(400).json({ error: 'Missing id' });
       await sql`
