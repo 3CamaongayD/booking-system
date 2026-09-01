@@ -57,6 +57,10 @@ module.exports = async (req, res) => {
     await sql`CREATE INDEX IF NOT EXISTS idx_reservations_player ON reservations(player_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_overrides_date ON overrides(date)`;
 
+    await sql`ALTER TABLE players ENABLE ROW LEVEL SECURITY`;
+    await sql`ALTER TABLE reservations ENABLE ROW LEVEL SECURITY`;
+    await sql`ALTER TABLE overrides ENABLE ROW LEVEL SECURITY`;
+
     return res.status(200).json({ success: true, message: 'Database tables created' });
   } catch (error) {
     console.error('Setup error:', error);
