@@ -53,6 +53,15 @@ module.exports = async (req, res) => {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS login_codes (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0
+      )
+    `;
+
     await sql`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_reservations_player ON reservations(player_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_overrides_date ON overrides(date)`;
@@ -60,6 +69,7 @@ module.exports = async (req, res) => {
     await sql`ALTER TABLE players ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE reservations ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE overrides ENABLE ROW LEVEL SECURITY`;
+    await sql`ALTER TABLE login_codes ENABLE ROW LEVEL SECURITY`;
 
     return res.status(200).json({ success: true, message: 'Database tables created' });
   } catch (error) {

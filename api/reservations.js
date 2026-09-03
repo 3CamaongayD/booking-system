@@ -1,5 +1,5 @@
 const { getDb } = require('./db');
-const { checkAdmin, setCors } = require('./_auth');
+const { checkAdmin, setCors, verifyPlayerToken } = require('./_auth');
 
 module.exports = async (req, res) => {
   setCors(req, res);
@@ -51,8 +51,20 @@ module.exports = async (req, res) => {
       const { id, paymentStatus, totalAmount, date, courtId, sport, slots, clearReceipts } = req.body;
 
       const isCancel = paymentStatus === 'cancelled' && !totalAmount && !date && !courtId && !sport && !slots && !clearReceipts;
-      if (!isCancel && !checkAdmin(req)) {
-        return res.status(401).json({ error: 'Unauthorized' });
+
+      if (!checkAdmin(req)) {
+        // The only non-admin write allowed is a player cancelling their own booking.
+        if (!isCancel) return res.status(401).json({ error: 'Unauthorized' });
+        if (!id) return res.status(400).json({ error: 'Missing id' });
+
+        const playerId = verifyPlayerToken(req);
+        if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const owner = await sql`SELECT player_id FROM reservations WHERE id = ${id}`;
+        if (!owner[0]) return res.status(404).json({ error: 'Not found' });
+        if (owner[0].player_id !== playerId) {
+          return res.status(403).json({ error: 'Forbidden' });
+        }
       }
 
       if (clearReceipts) {

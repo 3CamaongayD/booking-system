@@ -33,6 +33,7 @@
         currentPlayer: JSON.parse(localStorage.getItem('pkl_currentPlayer') || 'null'),
         booking: { court: null, date: null, slots: [], sport: null },
         bookingContact: null,
+        pendingLoginEmail: null,
         homeTab: 'book',
         bookingDate: todayStr(),
         weekOffset: 0,
@@ -174,7 +175,7 @@
 
         async _api(endpoint, method, body) {
             var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
-            var token = sessionStorage.getItem('pkl_adminToken');
+            var token = sessionStorage.getItem('pkl_adminToken') || localStorage.getItem('pkl_playerToken');
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             if (body) opts.body = JSON.stringify(body);
             var resp = await fetch('/api/' + endpoint, opts);
@@ -214,18 +215,26 @@
         },
 
         getPlayers() { return this._players; },
+        // POST upserts on email, so the row that comes back may be an existing
+        // player with a different id than the one generated here. Always trust
+        // the server's id or reservations end up pointing at a nonexistent player.
         async addPlayer(p) {
             p.id = genId();
             p.createdAt = new Date().toISOString();
-            await this._api('players', 'POST', p);
-            this._players.push(p);
-            return p;
+            var saved = await this._api('players', 'POST', p);
+            var player = {
+                id: (saved && saved.id) || p.id,
+                fullName: (saved && saved.full_name) || p.fullName,
+                email: (saved && saved.email) || p.email,
+                contactNumber: (saved && saved.contact_number) || p.contactNumber || '',
+                createdAt: (saved && saved.created_at) || p.createdAt
+            };
+            var idx = this._players.findIndex(function(x) { return x.id === player.id; });
+            if (idx >= 0) this._players[idx] = player;
+            else this._players.push(player);
+            return player;
         },
         getPlayer(id) { return this._players.find(function(p) { return p.id === id; }); },
-        getPlayerByEmail(email) {
-            var e = email.toLowerCase();
-            return this._players.find(function(p) { return p.email.toLowerCase() === e; });
-        },
         async updatePlayer(id, data) {
             var idx = this._players.findIndex(function(p) { return p.id === id; });
             if (idx >= 0) {
@@ -1064,24 +1073,55 @@
     // --- DASHBOARD PAGE ---
     function renderDashboard(container) {
         if (!State.currentPlayer) {
+            const step = State.pendingLoginEmail
+                ? `
+                    <div class="card">
+                        <div class="card-header">Enter Your Code</div>
+                        <p class="text-muted" style="font-size:13px; margin-bottom:12px;">
+                            We sent a 6-digit code to <strong>${escapeHtml(State.pendingLoginEmail)}</strong>.
+                            It expires in 15 minutes.
+                        </p>
+                        <div class="form-group">
+                            <label>6-Digit Code</label>
+                            <input type="text" class="form-control" id="dashLoginCode" inputmode="numeric"
+                                   autocomplete="one-time-code" maxlength="6" placeholder="000000"
+                                   style="text-align:center; letter-spacing:8px; font-size:20px;">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="window.PKL.verifyLoginCode()">Verify &amp; Continue</button>
+                        <button class="btn btn-outline btn-block mt-1" onclick="window.PKL.cancelLogin()">Use a different email</button>
+                    </div>
+                `
+                : `
+                    <div class="card">
+                        <div class="card-header">Player Login</div>
+                        <p class="text-muted" style="font-size:13px; margin-bottom:12px;">
+                            Enter your email and we'll send you a code to verify it's you.
+                        </p>
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" class="form-control" id="dashLoginEmail" placeholder="Enter your registered email">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="window.PKL.requestLoginCode('dashLoginEmail')">Send Me a Code</button>
+                        <p class="text-center mt-2" style="font-size:13px;"><a href="#register">Register as new player</a></p>
+                    </div>
+                `;
+
             container.innerHTML = `
                 <div class="page-header">
                     <h1>My Bookings</h1>
                     <p>Log in to view your booking history</p>
                     <div class="accent-line"></div>
                 </div>
-                <div style="max-width:400px; margin:40px auto;">
-                    <div class="card">
-                        <div class="card-header">Player Login</div>
-                        <div class="form-group">
-                            <label>Email Address</label>
-                            <input type="email" class="form-control" id="dashLoginEmail" placeholder="Enter your registered email">
-                        </div>
-                        <button class="btn btn-primary btn-block" onclick="window.PKL.loginPlayer('dashLoginEmail')">Access My Bookings</button>
-                        <p class="text-center mt-2" style="font-size:13px;"><a href="#register">Register as new player</a></p>
-                    </div>
-                </div>
+                <div style="max-width:400px; margin:40px auto;">${step}</div>
             `;
+
+            const codeInput = document.getElementById('dashLoginCode');
+            if (codeInput) {
+                codeInput.focus();
+                codeInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') window.PKL.verifyLoginCode();
+                });
+            }
             return;
         }
 
@@ -1295,6 +1335,9 @@
                 if (result.valid) {
                     sessionStorage.setItem('pkl_adminToken', pass);
                     State.admin.loggedIn = true;
+                    // Data was fetched before login, so players are missing contact
+                    // details. Re-fetch now that requests carry the admin token.
+                    await Data.init();
                     UI.toast('Admin access granted', 'success');
                     renderAdmin(container);
                 } else {
@@ -1908,8 +1951,6 @@
                 }
             }
 
-            var player = Data.getPlayerByEmail(email);
-
             const paymentMethod = document.getElementById('selectedPayment').value;
             const receiptInput = document.getElementById('receiptUpload');
             if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
@@ -1939,11 +1980,10 @@
                 try {
                     const receiptData = e.target.result;
 
-                    if (!player) {
-                        player = await Data.addPlayer({ fullName: name, contactNumber: phone, email: email, emergencyContact: '' });
-                    } else {
-                        await Data.updatePlayer(player.id, { fullName: name, contactNumber: phone });
-                    }
+                    // Upserts on email: creates a new player or returns the existing one.
+                    var player = await Data.addPlayer({
+                        fullName: name, contactNumber: phone, email: email, emergencyContact: ''
+                    });
 
                     const reservation = await Data.addReservation({
                         playerId: player.id,
@@ -1975,33 +2015,76 @@
             reader.readAsDataURL(receiptInput.files[0]);
         },
 
-        loginPlayer(inputId) {
-            const id = inputId || 'loginEmail';
-            const emailEl = document.getElementById(id);
+        async requestLoginCode(inputId) {
+            const emailEl = document.getElementById(inputId || 'dashLoginEmail');
             if (!emailEl) return;
             const email = emailEl.value.trim();
-            if (!email) { UI.toast('Please enter your email', 'error'); return; }
-
-            var reservations = Data.getReservations().filter(function(r) {
-                var player = Data.getPlayer(r.playerId);
-                return player && player.email.toLowerCase() === email.toLowerCase();
-            });
-
-            if (reservations.length === 0) {
-                UI.toast('No bookings found for this email', 'error');
+            if (!email || email.indexOf('@') < 0) {
+                UI.toast('Please enter a valid email', 'error');
                 return;
             }
 
-            var player = Data.getPlayerByEmail(email);
-            State.currentPlayer = player;
-            localStorage.setItem('pkl_currentPlayer', JSON.stringify(player));
-            UI.toast('Welcome back, ' + player.fullName, 'success');
+            UI.showProcessing('Sending your code...');
+            try {
+                const resp = await fetch('/api/player-auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+                UI.hideProcessing();
+                if (!resp.ok) { UI.toast('Could not send code. Try again.', 'error'); return; }
+                State.pendingLoginEmail = email;
+                UI.toast('If that email has bookings, a code is on its way.', 'success');
+                handleRoute();
+            } catch (err) {
+                UI.hideProcessing();
+                UI.toast('Could not send code. Try again.', 'error');
+            }
+        },
+
+        async verifyLoginCode() {
+            const codeEl = document.getElementById('dashLoginCode');
+            if (!codeEl) return;
+            const code = codeEl.value.trim();
+            if (!code) { UI.toast('Please enter the code', 'error'); return; }
+
+            UI.showProcessing('Verifying...');
+            try {
+                const resp = await fetch('/api/player-auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: State.pendingLoginEmail, code: code })
+                });
+                const result = await resp.json();
+                UI.hideProcessing();
+
+                if (!resp.ok) {
+                    UI.toast(result.error || 'Incorrect code', 'error');
+                    return;
+                }
+
+                localStorage.setItem('pkl_playerToken', result.token);
+                localStorage.setItem('pkl_currentPlayer', JSON.stringify(result.player));
+                State.currentPlayer = result.player;
+                State.pendingLoginEmail = null;
+                UI.toast('Welcome back, ' + result.player.fullName, 'success');
+                handleRoute();
+            } catch (err) {
+                UI.hideProcessing();
+                UI.toast('Could not verify code. Try again.', 'error');
+            }
+        },
+
+        cancelLogin() {
+            State.pendingLoginEmail = null;
             handleRoute();
         },
 
         logout() {
             State.currentPlayer = null;
+            State.pendingLoginEmail = null;
             localStorage.removeItem('pkl_currentPlayer');
+            localStorage.removeItem('pkl_playerToken');
             UI.toast('Logged out successfully', 'info');
             handleRoute();
         },

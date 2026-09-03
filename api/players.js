@@ -9,12 +9,23 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === 'GET') {
+      const isAdmin = checkAdmin(req);
       const { email } = req.query;
+
+      // Lookup by email is admin-only; otherwise it enumerates the customer list.
       if (email) {
+        if (!isAdmin) return res.status(401).json({ error: 'Unauthorized' });
         const rows = await sql`SELECT * FROM players WHERE email = ${email}`;
         return res.status(200).json(rows[0] || null);
       }
-      const rows = await sql`SELECT * FROM players ORDER BY created_at DESC`;
+
+      if (isAdmin) {
+        const rows = await sql`SELECT * FROM players ORDER BY created_at DESC`;
+        return res.status(200).json(rows);
+      }
+
+      // Public callers get names only — the booking grid needs nothing else.
+      const rows = await sql`SELECT id, full_name FROM players ORDER BY created_at DESC`;
       return res.status(200).json(rows);
     }
 
