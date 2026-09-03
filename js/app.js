@@ -1462,7 +1462,7 @@
                     <div class="table-container">
                         <table>
                             <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th></th></tr></thead>
-                            <tbody>${allRes.sort((a, b) => b.createdAt - a.createdAt).map(r => bookingRow(r, r.paymentStatus === 'pending')).join('')}</tbody>
+                            <tbody>${allRes.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(r => bookingRow(r, r.paymentStatus === 'pending')).join('')}</tbody>
                         </table>
                     </div>
                 ` : '<p class="text-muted text-center" style="padding:24px;">No bookings yet</p>'}
