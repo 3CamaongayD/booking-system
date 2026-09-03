@@ -42,7 +42,10 @@
         admin: {
             loggedIn: false,
             activeTab: 'bookings',
-            scheduleDate: todayStr()
+            scheduleDate: todayStr(),
+            bookingFilter: { q: '', status: 'all', from: '', to: '' },
+            selectedPending: [],
+            refocusSearch: false
         }
     };
 
@@ -136,6 +139,27 @@
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // escapeHtml leaves quotes intact, which breaks out of an attribute value.
+    function escapeAttr(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    // Shared by single and bulk approve. Throws if the status write fails so
+    // bulk approve can count failures; the email is fire-and-forget.
+    async function approveOne(id) {
+        await Data.updateReservationStatus(id, 'paid');
+        var res = Data.getReservations().find(function(r) { return r.id === id; });
+        if (res) {
+            var player = Data.getPlayer(res.playerId);
+            if (player) sendBookingEmail('confirmed', res, player.fullName, player.email);
+        }
     }
 
     function sendBookingEmail(type, reservation, playerName, playerEmail) {
@@ -1378,6 +1402,8 @@
 
     function renderAdminPanel(container) {
         const tab = State.admin.activeTab;
+        const pendingCount = Data.getReservations().filter(r => r.paymentStatus === 'pending').length;
+        const pendingBadge = pendingCount > 0 ? ' <span class="tab-badge">' + pendingCount + '</span>' : '';
         container.innerHTML = `
             <div class="admin-topbar">
                 <div>
@@ -1388,7 +1414,7 @@
             </div>
 
             <div class="tabs">
-                <button class="tab ${tab === 'bookings' ? 'active' : ''}" onclick="window.PKL.adminTab('bookings')">Bookings</button>
+                <button class="tab ${tab === 'bookings' ? 'active' : ''}" onclick="window.PKL.adminTab('bookings')">Bookings${pendingBadge}</button>
                 <button class="tab ${tab === 'schedule' ? 'active' : ''}" onclick="window.PKL.adminTab('schedule')">Schedule</button>
                 <button class="tab ${tab === 'overrides' ? 'active' : ''}" onclick="window.PKL.adminTab('overrides')">Overrides</button>
                 <button class="tab ${tab === 'players' ? 'active' : ''}" onclick="window.PKL.adminTab('players')">Players</button>
@@ -1409,8 +1435,17 @@
     function renderAdminBookings(content) {
         const allRes = Data.getReservations();
         const pending = allRes.filter(r => r.paymentStatus === 'pending');
-        const approved = allRes.filter(r => r.paymentStatus === 'paid');
-        const rejected = allRes.filter(r => r.paymentStatus === 'rejected');
+        const today = todayStr();
+        const todayRes = allRes
+            .filter(r => r.date === today && r.paymentStatus !== 'cancelled' && r.paymentStatus !== 'rejected')
+            .sort((a, b) => firstHour(a) - firstHour(b));
+
+        const f = State.admin.bookingFilter;
+        const selected = State.admin.selectedPending;
+
+        function firstHour(r) {
+            return r.slots.reduce((m, s) => Math.min(m, s.hour), 99);
+        }
 
         function statusBadge(s) {
             if (s === 'paid') return '<span class="badge badge-success">Approved</span>';
@@ -1420,15 +1455,46 @@
             return '<span class="badge badge-info">' + s + '</span>';
         }
 
-        function bookingRow(r, showActions) {
-            const player = Data.getPlayer(r.playerId);
+        function matchesFilter(r) {
+            if (f.status !== 'all' && r.paymentStatus !== f.status) return false;
+            if (f.from && r.date < f.from) return false;
+            if (f.to && r.date > f.to) return false;
+            if (f.q) {
+                const player = Data.getPlayer(r.playerId);
+                const hay = [
+                    r.confirmationCode,
+                    player ? player.fullName : '',
+                    getCourtName(r.courtId),
+                    r.date,
+                    r.paymentMethod
+                ].join(' ').toLowerCase();
+                if (hay.indexOf(f.q.toLowerCase()) < 0) return false;
+            }
+            return true;
+        }
+
+        const filtered = allRes.filter(matchesFilter)
+            .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        const filtersActive = f.q || f.status !== 'all' || f.from || f.to;
+
+        function timeRange(r) {
             const ss = [...r.slots].sort((a, b) => a.hour - b.hour);
+            return formatHour(ss[0].hour) + ' - ' + formatHour(ss[ss.length - 1].hour + 1);
+        }
+
+        function bookingRow(r, showActions, selectable) {
+            const player = Data.getPlayer(r.playerId);
+            const isChecked = selected.indexOf(r.id) >= 0;
             return '<tr>' +
+                (selectable
+                    ? '<td><input type="checkbox" aria-label="Select booking" ' + (isChecked ? 'checked' : '') +
+                      ' onchange="window.PKL.togglePendingSelect(\'' + r.id + '\', this.checked)"></td>'
+                    : '') +
                 '<td><code>' + r.confirmationCode + '</code></td>' +
                 '<td>' + (player ? escapeHtml(player.fullName) : 'Unknown') + '</td>' +
                 '<td>' + getCourtName(r.courtId) + '</td>' +
                 '<td>' + formatDate(r.date) + '</td>' +
-                '<td>' + formatHour(ss[0].hour) + ' - ' + formatHour(ss[ss.length - 1].hour + 1) + '</td>' +
+                '<td>' + timeRange(r) + '</td>' +
                 '<td>' + formatCurrency(r.totalAmount) + '</td>' +
                 '<td>' + r.paymentMethod.toUpperCase() + '</td>' +
                 '<td>' + statusBadge(r.paymentStatus) + '</td>' +
@@ -1441,33 +1507,105 @@
             '</tr>';
         }
 
+        const allSelected = pending.length > 0 && selected.length === pending.length;
+
         content.innerHTML = `
             <div class="card mb-3">
-                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="card-header">&#128197; Today &mdash; ${formatDate(today)} (${todayRes.length})</div>
+                ${todayRes.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Time</th><th>Player</th><th>Facility</th><th>Status</th></tr></thead>
+                            <tbody>${todayRes.map(r => {
+                                const player = Data.getPlayer(r.playerId);
+                                return '<tr>' +
+                                    '<td><strong>' + timeRange(r) + '</strong></td>' +
+                                    '<td>' + (player ? escapeHtml(player.fullName) : 'Unknown') + '</td>' +
+                                    '<td>' + getCourtName(r.courtId) + '</td>' +
+                                    '<td>' + statusBadge(r.paymentStatus) + '</td>' +
+                                '</tr>';
+                            }).join('')}</tbody>
+                        </table>
+                    </div>
+                ` : '<p class="text-muted text-center" style="padding:24px; font-size:14px;">Nothing booked for today</p>'}
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                     <span>&#9203; Pending Verification (${pending.length})</span>
+                    ${selected.length > 0 ? `
+                        <button class="btn btn-success btn-sm" onclick="window.PKL.bulkApprove()">
+                            Approve Selected (${selected.length})
+                        </button>
+                    ` : ''}
                 </div>
                 ${pending.length > 0 ? `
                     <div class="table-container">
                         <table>
-                            <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th>Actions</th></tr></thead>
-                            <tbody>${pending.map(r => bookingRow(r, true)).join('')}</tbody>
+                            <thead><tr>
+                                <th><input type="checkbox" aria-label="Select all pending" ${allSelected ? 'checked' : ''}
+                                     onchange="window.PKL.toggleAllPending(this.checked)"></th>
+                                <th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th>Actions</th>
+                            </tr></thead>
+                            <tbody>${pending.map(r => bookingRow(r, true, true)).join('')}</tbody>
                         </table>
                     </div>
                 ` : '<p class="text-muted text-center" style="padding:24px; font-size:14px;">No pending bookings</p>'}
             </div>
 
             <div class="card">
-                <div class="card-header">All Bookings (${allRes.length})</div>
-                ${allRes.length > 0 ? `
+                <div class="card-header">All Bookings (${filtered.length}${filtersActive ? ' of ' + allRes.length : ''})</div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">
+                    <div style="flex:1; min-width:180px;">
+                        <label style="font-size:12px; color:var(--gray-500);">Search</label>
+                        <input type="text" class="form-control" id="bookingSearch" value="${escapeAttr(f.q)}"
+                               placeholder="Code, player, court..."
+                               oninput="window.PKL.adminBookingSearch(this.value)">
+                    </div>
+                    <div style="min-width:130px;">
+                        <label style="font-size:12px; color:var(--gray-500);">Status</label>
+                        <select class="form-control" onchange="window.PKL.adminBookingStatus(this.value)">
+                            <option value="all" ${f.status === 'all' ? 'selected' : ''}>All</option>
+                            <option value="pending" ${f.status === 'pending' ? 'selected' : ''}>Pending</option>
+                            <option value="paid" ${f.status === 'paid' ? 'selected' : ''}>Approved</option>
+                            <option value="rejected" ${f.status === 'rejected' ? 'selected' : ''}>Rejected</option>
+                            <option value="cancelled" ${f.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                        </select>
+                    </div>
+                    <div style="min-width:130px;">
+                        <label style="font-size:12px; color:var(--gray-500);">From</label>
+                        <input type="date" class="form-control" value="${f.from}"
+                               onchange="window.PKL.adminBookingDate('from', this.value)">
+                    </div>
+                    <div style="min-width:130px;">
+                        <label style="font-size:12px; color:var(--gray-500);">To</label>
+                        <input type="date" class="form-control" value="${f.to}"
+                               onchange="window.PKL.adminBookingDate('to', this.value)">
+                    </div>
+                    ${filtersActive ? `<button class="btn btn-outline btn-sm" onclick="window.PKL.adminClearFilters()">Clear</button>` : ''}
+                </div>
+
+                ${filtered.length > 0 ? `
                     <div class="table-container">
                         <table>
                             <thead><tr><th>Code</th><th>Player</th><th>Facility</th><th>Date</th><th>Time</th><th>Amount</th><th>Via</th><th>Status</th><th></th></tr></thead>
-                            <tbody>${allRes.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(r => bookingRow(r, r.paymentStatus === 'pending')).join('')}</tbody>
+                            <tbody>${filtered.map(r => bookingRow(r, r.paymentStatus === 'pending', false)).join('')}</tbody>
                         </table>
                     </div>
-                ` : '<p class="text-muted text-center" style="padding:24px;">No bookings yet</p>'}
+                ` : `<p class="text-muted text-center" style="padding:24px;">${filtersActive ? 'No bookings match these filters' : 'No bookings yet'}</p>`}
             </div>
         `;
+
+        // Re-rendering on each keystroke drops focus; put it back where it was.
+        if (State.admin.refocusSearch) {
+            const searchEl = document.getElementById('bookingSearch');
+            if (searchEl) {
+                searchEl.focus();
+                searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
+            }
+            State.admin.refocusSearch = false;
+        }
     }
 
     function renderAdminSchedule(content) {
@@ -2169,25 +2307,121 @@
             if (content) renderAdminSchedule(content);
         },
 
-        async approveBooking(id) {
-            try {
-                await Data.updateReservationStatus(id, 'paid');
-                var res = Data.getReservations().find(function(r) { return r.id === id; });
-                if (res) {
-                    var player = Data.getPlayer(res.playerId);
-                    if (player) {
-                        sendBookingEmail('confirmed', res, player.fullName, player.email);
-                    }
+        adminBookingSearch(v) {
+            State.admin.bookingFilter.q = v;
+            State.admin.refocusSearch = true;
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        adminBookingStatus(v) {
+            State.admin.bookingFilter.status = v;
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        adminBookingDate(which, v) {
+            State.admin.bookingFilter[which] = v;
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        adminClearFilters() {
+            State.admin.bookingFilter = { q: '', status: 'all', from: '', to: '' };
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        togglePendingSelect(id, checked) {
+            const sel = State.admin.selectedPending;
+            const i = sel.indexOf(id);
+            if (checked && i < 0) sel.push(id);
+            else if (!checked && i >= 0) sel.splice(i, 1);
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        toggleAllPending(checked) {
+            State.admin.selectedPending = checked
+                ? Data.getReservations().filter(r => r.paymentStatus === 'pending').map(r => r.id)
+                : [];
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        bulkApprove() {
+            const ids = State.admin.selectedPending.slice();
+            if (ids.length === 0) return;
+            UI.showModal('Approve ' + ids.length + ' Booking' + (ids.length > 1 ? 's' : '') + '?',
+                '<p>This marks ' + ids.length + ' booking' + (ids.length > 1 ? 's' : '') +
+                ' as paid and emails a confirmation to each player. This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-success" onclick="window.PKL.confirmBulkApprove()">Approve All</button>'
+            );
+        },
+
+        async confirmBulkApprove() {
+            const ids = State.admin.selectedPending.slice();
+            UI.closeModal();
+            UI.showProcessing('Approving ' + ids.length + ' booking(s)...');
+            let ok = 0, failed = 0;
+            for (const id of ids) {
+                try {
+                    await approveOne(id);
+                    ok++;
+                } catch (err) {
+                    failed++;
                 }
+            }
+            State.admin.selectedPending = [];
+            UI.hideProcessing();
+            if (failed === 0) {
+                UI.toast('Approved ' + ok + ' booking(s)', 'success');
+            } else {
+                UI.toast('Approved ' + ok + ', failed ' + failed, 'warning');
+            }
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
+        },
+
+        approveBooking(id) {
+            const res = Data.getReservations().find(r => r.id === id);
+            const player = res ? Data.getPlayer(res.playerId) : null;
+            const who = player ? escapeHtml(player.fullName) : 'this player';
+            UI.showModal('Approve Booking?',
+                '<p>Approve <strong>' + (res ? res.confirmationCode : '') + '</strong> for <strong>' + who + '</strong>?</p>' +
+                '<p class="text-muted" style="font-size:13px;">A confirmation email will be sent immediately. This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-success" onclick="window.PKL.confirmApprove(\'' + id + '\')">Approve</button>'
+            );
+        },
+
+        async confirmApprove(id) {
+            UI.closeModal();
+            try {
+                await approveOne(id);
                 UI.toast('Booking approved!', 'success');
-                const content = document.getElementById('adminTabContent');
-                if (content) renderAdminBookings(content);
             } catch (err) {
                 UI.toast('Failed to approve booking', 'error');
             }
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
         },
 
-        async rejectBooking(id) {
+        rejectBooking(id) {
+            const res = Data.getReservations().find(r => r.id === id);
+            const player = res ? Data.getPlayer(res.playerId) : null;
+            const who = player ? escapeHtml(player.fullName) : 'this player';
+            UI.showModal('Reject Booking?',
+                '<p>Reject <strong>' + (res ? res.confirmationCode : '') + '</strong> for <strong>' + who + '</strong>?</p>' +
+                '<p class="text-muted" style="font-size:13px;">A rejection email will be sent immediately. This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-danger" onclick="window.PKL.confirmReject(\'' + id + '\')">Reject</button>'
+            );
+        },
+
+        async confirmReject(id) {
+            UI.closeModal();
             try {
                 await Data.updateReservationStatus(id, 'rejected');
                 var res = Data.getReservations().find(function(r) { return r.id === id; });
@@ -2198,11 +2432,11 @@
                     }
                 }
                 UI.toast('Booking rejected', 'info');
-                const content = document.getElementById('adminTabContent');
-                if (content) renderAdminBookings(content);
             } catch (err) {
                 UI.toast('Failed to reject booking', 'error');
             }
+            const content = document.getElementById('adminTabContent');
+            if (content) renderAdminBookings(content);
         },
 
         async deleteBooking(id) {
