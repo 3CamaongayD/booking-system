@@ -263,9 +263,17 @@
         },
         async cancelReservation(id) {
             var idx = this._reservations.findIndex(function(r) { return r.id === id; });
-            if (idx >= 0) {
-                this._reservations[idx].paymentStatus = 'cancelled';
+            if (idx < 0) return;
+            var previous = this._reservations[idx].paymentStatus;
+            this._writing = true;
+            this._reservations[idx].paymentStatus = 'cancelled';
+            try {
                 await this._api('reservations', 'PATCH', { id: id, paymentStatus: 'cancelled' });
+            } catch (e) {
+                this._reservations[idx].paymentStatus = previous;
+                throw e;
+            } finally {
+                this._writing = false;
             }
         },
         isSlotBooked(courtId, date, hour) {
@@ -301,30 +309,49 @@
         },
 
         async updateReservationStatus(id, status) {
-            this._writing = true;
             var idx = this._reservations.findIndex(function(r) { return r.id === id; });
-            if (idx >= 0) {
-                this._reservations[idx].paymentStatus = status;
+            if (idx < 0) return;
+            var previous = this._reservations[idx].paymentStatus;
+            this._writing = true;
+            this._reservations[idx].paymentStatus = status;
+            try {
                 await this._api('reservations', 'PATCH', { id: id, paymentStatus: status });
+            } catch (e) {
+                this._reservations[idx].paymentStatus = previous;
+                throw e;
+            } finally {
+                this._writing = false;
             }
-            this._writing = false;
         },
 
         async updateReservation(id, updates) {
-            this._writing = true;
             var idx = this._reservations.findIndex(function(r) { return r.id === id; });
-            if (idx >= 0) {
-                Object.assign(this._reservations[idx], updates);
+            if (idx < 0) return;
+            var previous = Object.assign({}, this._reservations[idx]);
+            this._writing = true;
+            Object.assign(this._reservations[idx], updates);
+            try {
                 await this._api('reservations', 'PATCH', Object.assign({ id: id }, updates));
+            } catch (e) {
+                this._reservations[idx] = previous;
+                throw e;
+            } finally {
+                this._writing = false;
             }
-            this._writing = false;
         },
 
         async deleteReservation(id) {
+            var previous = this._reservations;
             this._writing = true;
             this._reservations = this._reservations.filter(function(r) { return r.id !== id; });
-            await this._api('reservations', 'DELETE', { id: id });
-            this._writing = false;
+            try {
+                await this._api('reservations', 'DELETE', { id: id });
+            } catch (e) {
+                this._reservations = previous;
+                throw e;
+            } finally {
+                this._writing = false;
+            }
         }
     };
 
