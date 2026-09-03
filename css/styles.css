@@ -2218,6 +2218,9 @@ footer p:last-child { margin-top: 4px; color: var(--gray-500); }
         font-size: 12px;
     }
 
+    /* 16px minimum stops iOS Safari from auto-zooming on focus */
+    .form-control { font-size: 16px; }
+
     .date-full { display: none; }
     .date-short { display: inline; }
     .book-date-nav {
@@ -2297,7 +2300,7 @@ footer p:last-child { margin-top: 4px; color: var(--gray-500); }
     .bg-time-cell { font-size: 11px; padding: 6px 4px; }
 
     .btn { min-height: 44px; }
-    .btn-sm { min-height: 36px; }
+    .btn-sm { min-height: 40px; }
 
     .about-card { padding: 16px; }
     .rate-row { font-size: 13px; }
