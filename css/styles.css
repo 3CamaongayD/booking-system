@@ -1153,6 +1153,10 @@ tbody tr:hover { background: var(--gray-50); }
     letter-spacing: -0.3px;
 }
 
+.schedule-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
 .schedule-grid {
     display: grid;
     grid-template-columns: 80px repeat(5, 1fr);
@@ -1160,6 +1164,7 @@ tbody tr:hover { background: var(--gray-50); }
     background: var(--gray-200);
     border-radius: var(--radius);
     overflow: hidden;
+    min-width: 620px;
 }
 .schedule-cell {
     background: var(--white);
@@ -1547,6 +1552,7 @@ tbody tr:hover { background: var(--gray-50); }
     margin-bottom: 16px;
     flex-wrap: wrap;
 }
+.date-short { display: none; }
 .book-date-label {
     font-family: var(--font-heading);
     font-size: 13px;
@@ -2210,6 +2216,18 @@ footer p:last-child { margin-top: 4px; color: var(--gray-500); }
 
     .schedule-grid {
         font-size: 12px;
+    }
+
+    .date-full { display: none; }
+    .date-short { display: inline; }
+    .book-date-nav {
+        gap: 8px;
+    }
+    .book-date-label {
+        flex: 1 1 100%;
+        order: -1;
+        text-align: center;
+        font-size: 14px;
     }
 
     #app { padding: 20px 16px; }

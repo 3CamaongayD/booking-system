@@ -67,6 +67,11 @@
         return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
 
+    function formatDateShort(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
     function formatHour(h) {
         if (h === 0 || h === 24) return '12:00 AM';
         if (h === 12) return '12:00 PM';
@@ -433,10 +438,12 @@
         var booking = State.booking;
         var html = '';
 
-        var dateLabel = dateStr === todayStr() ? 'Today, ' + formatDate(dateStr) : formatDate(dateStr);
+        var isToday = dateStr === todayStr();
+        var dateLabel = isToday ? 'Today, ' + formatDate(dateStr) : formatDate(dateStr);
+        var dateLabelShort = isToday ? 'Today, ' + formatDateShort(dateStr) : formatDateShort(dateStr);
         html += '<div class="book-date-nav">';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(-1)">Previous</button>';
-        html += '<div class="book-date-label">&#128197; ' + dateLabel + '</div>';
+        html += '<div class="book-date-label">&#128197; <span class="date-full">' + dateLabel + '</span><span class="date-short">' + dateLabelShort + '</span></div>';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(1)">Next</button>';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateReset()" title="Go to today">Today</button>';
         html += '</div>';
@@ -1406,6 +1413,7 @@
             </div>
 
             <div class="card">
+                <div class="schedule-scroll">
                 <div class="schedule-grid">
                     <div class="schedule-header">Time</div>
                     ${CONFIG.courts.map(c => `<div class="schedule-header">${c.name}</div>`).join('')}
@@ -1427,6 +1435,7 @@
             });
             return row;
         }).join('')}
+                </div>
                 </div>
             </div>
         `;
