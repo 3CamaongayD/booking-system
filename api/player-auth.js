@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 const { Resend } = require('resend');
 const { getDb } = require('./db');
-const { setCors, signPlayerToken } = require('./_auth');
+const { setCors, signPlayerToken, clientIp } = require('./_auth');
+const { allow } = require('./_ratelimit');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Kepler Insight Booking <booking@keplerinsightschool.com>';
@@ -98,6 +99,17 @@ module.exports = async (req, res) => {
     }
 
     // --- Step 1: request a code ---
+    // Throttled before any lookup so the limits reveal nothing about which
+    // emails are registered. Per-email stops flooding one person's inbox;
+    // per-IP stops mass sending (and burning the Resend quota) while still
+    // allowing a shared network like school wifi.
+    const ip = clientIp(req);
+    const emailOk = await allow(sql, 'login-code:' + email, 3, 15);
+    const ipOk = await allow(sql, 'login-code-ip:' + ip, 15, 15);
+    if (!emailOk || !ipOk) {
+      return res.status(429).json({ error: 'Too many code requests. Please wait a few minutes.' });
+    }
+
     const players = await sql`SELECT full_name FROM players WHERE LOWER(email) = ${email}`;
 
     // Always report success so this cannot be used to test which emails exist.

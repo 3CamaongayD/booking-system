@@ -75,6 +75,18 @@ module.exports = async (req, res) => {
       ON admin_login_attempts(ip, attempted_at DESC)
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        id BIGSERIAL PRIMARY KEY,
+        bucket TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_rate_limits_bucket_time
+      ON rate_limits(bucket, created_at DESC)
+    `;
+
     await sql`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_reservations_player ON reservations(player_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_overrides_date ON overrides(date)`;
@@ -84,6 +96,7 @@ module.exports = async (req, res) => {
     await sql`ALTER TABLE overrides ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE login_codes ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE admin_login_attempts ENABLE ROW LEVEL SECURITY`;
+    await sql`ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY`;
 
     return res.status(200).json({ success: true, message: 'Database tables created' });
   } catch (error) {

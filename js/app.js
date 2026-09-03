@@ -2192,7 +2192,12 @@
                     location.hash = '#confirmation';
                 } catch (err) {
                     UI.hideProcessing();
-                    UI.toast('Failed to submit booking. Please try again.', 'error');
+                    UI.toast(
+                        String(err && err.message).indexOf('429') >= 0
+                            ? 'Too many bookings from this network. Please try again later.'
+                            : 'Failed to submit booking. Please try again.',
+                        'error'
+                    );
                     console.error('Booking error:', err);
                 }
             };
@@ -2216,6 +2221,11 @@
                     body: JSON.stringify({ email: email })
                 });
                 UI.hideProcessing();
+                if (resp.status === 429) {
+                    const body = await resp.json().catch(function() { return {}; });
+                    UI.toast(body.error || 'Too many code requests. Please wait a few minutes.', 'error');
+                    return;
+                }
                 if (!resp.ok) { UI.toast('Could not send code. Try again.', 'error'); return; }
                 State.pendingLoginEmail = email;
                 UI.toast('If that email has bookings, a code is on its way.', 'success');

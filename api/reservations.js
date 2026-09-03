@@ -1,5 +1,6 @@
 const { getDb } = require('./db');
-const { checkAdmin, setCors, verifyPlayerToken } = require('./_auth');
+const { checkAdmin, setCors, verifyPlayerToken, clientIp } = require('./_auth');
+const { allow } = require('./_ratelimit');
 
 module.exports = async (req, res) => {
   setCors(req, res);
@@ -20,6 +21,15 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'POST') {
+      // Generous enough for a shared network (school wifi shares one IP)
+      // while still stopping a script from filling the calendar.
+      if (!checkAdmin(req)) {
+        const ok = await allow(sql, 'booking-ip:' + clientIp(req), 30, 60);
+        if (!ok) {
+          return res.status(429).json({ error: 'Too many bookings from this network. Please try again later.' });
+        }
+      }
+
       const r = req.body;
       if (!r.id || !r.confirmationCode || !r.playerId || !r.courtId || !r.date || !r.slots) {
         return res.status(400).json({ error: 'Missing required fields' });
