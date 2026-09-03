@@ -141,6 +141,50 @@
         return div.innerHTML;
     }
 
+    function readAsDataUrl(file) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onerror = function () { reject(new Error('Could not read file')); };
+            reader.onload = function (e) { resolve(e.target.result); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Phone photos run 3-8MB, and base64 inflates them ~33% — past Vercel's
+    // 4.5MB request cap. Downscaling to JPEG keeps a receipt legible at a
+    // fraction of the size, so uploads succeed and rows stay small.
+    function compressImage(file, maxDim, quality) {
+        return new Promise(function (resolve, reject) {
+            readAsDataUrl(file).then(function (dataUrl) {
+                var img = new Image();
+                img.onerror = function () { reject(new Error('Could not decode image')); };
+                img.onload = function () {
+                    var w = img.width;
+                    var h = img.height;
+                    if (!w || !h) { reject(new Error('Empty image')); return; }
+                    if (w > maxDim || h > maxDim) {
+                        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
+                    }
+                    try {
+                        var canvas = document.createElement('canvas');
+                        canvas.width = w;
+                        canvas.height = h;
+                        var ctx = canvas.getContext('2d');
+                        // JPEG has no alpha; without this, transparent PNGs go black.
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                img.src = dataUrl;
+            }).catch(reject);
+        });
+    }
+
     // escapeHtml leaves quotes intact, which breaks out of an attribute value.
     function escapeAttr(str) {
         return String(str == null ? '' : str)
@@ -2142,8 +2186,8 @@
                 return;
             }
             var receiptFile = receiptInput.files[0];
-            if (receiptFile.size > 5 * 1024 * 1024) {
-                UI.toast('Receipt image must be under 5MB', 'error');
+            if (receiptFile.size > 10 * 1024 * 1024) {
+                UI.toast('Receipt image must be under 10MB', 'error');
                 return;
             }
             if (!receiptFile.type.startsWith('image/')) {
@@ -2157,12 +2201,26 @@
             const discAmt = Math.round(subtotal * disc);
             const total = subtotal - discAmt;
 
-            UI.showProcessing('Submitting booking...');
+            UI.showProcessing('Preparing your receipt...');
 
-            const reader = new FileReader();
-            reader.onload = async function(e) {
+            (async function () {
                 try {
-                    const receiptData = e.target.result;
+                    let receiptData;
+                    try {
+                        receiptData = await compressImage(receiptFile, 1400, 0.7);
+                    } catch (compressErr) {
+                        // Formats the browser cannot decode (some HEIC) fall back to
+                        // the original, which only fits if it was small to begin with.
+                        console.warn('Receipt compression failed, using original:', compressErr);
+                        if (receiptFile.size > 3 * 1024 * 1024) {
+                            UI.hideProcessing();
+                            UI.toast('Could not process that image. Try a screenshot or a smaller photo.', 'error');
+                            return;
+                        }
+                        receiptData = await readAsDataUrl(receiptFile);
+                    }
+
+                    UI.showProcessing('Submitting booking...');
 
                     // Upserts on email: creates a new player or returns the existing one.
                     var player = await Data.addPlayer({
@@ -2200,8 +2258,7 @@
                     );
                     console.error('Booking error:', err);
                 }
-            };
-            reader.readAsDataURL(receiptInput.files[0]);
+            })();
         },
 
         async requestLoginCode(inputId) {
