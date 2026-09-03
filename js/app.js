@@ -203,6 +203,14 @@
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             if (body) opts.body = JSON.stringify(body);
             var resp = await fetch('/api/' + endpoint, opts);
+            if (resp.status === 401 && sessionStorage.getItem('pkl_adminToken')) {
+                // Admin session expired (12h) — send them back to the login
+                // rather than surfacing a generic failure on every action.
+                sessionStorage.removeItem('pkl_adminToken');
+                State.admin.loggedIn = false;
+                UI.toast('Admin session expired. Please log in again.', 'warning');
+                handleRoute();
+            }
             if (!resp.ok) throw new Error('API error: ' + resp.status);
             return resp.json();
         },
@@ -1383,8 +1391,13 @@
                     body: JSON.stringify({ password: pass })
                 });
                 var result = await resp.json();
-                if (result.valid) {
-                    sessionStorage.setItem('pkl_adminToken', pass);
+                if (resp.status === 429) {
+                    UI.toast(result.error || 'Too many attempts. Try again later.', 'error');
+                    return;
+                }
+                if (result.valid && result.token) {
+                    // Store the session token, never the password itself.
+                    sessionStorage.setItem('pkl_adminToken', result.token);
                     State.admin.loggedIn = true;
                     // Data was fetched before login, so players are missing contact
                     // details. Re-fetch now that requests carry the admin token.
@@ -1392,7 +1405,13 @@
                     UI.toast('Admin access granted', 'success');
                     renderAdmin(container);
                 } else {
-                    UI.toast('Incorrect password', 'error');
+                    var left = typeof result.remaining === 'number' ? result.remaining : null;
+                    UI.toast(
+                        left !== null && left <= 2
+                            ? 'Incorrect password — ' + left + ' attempt(s) left before lockout'
+                            : 'Incorrect password',
+                        'error'
+                    );
                 }
             } catch (err) {
                 UI.toast('Authentication failed', 'error');
