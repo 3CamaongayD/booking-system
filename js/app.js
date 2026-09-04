@@ -185,6 +185,43 @@
         });
     }
 
+    function dataUrlToBlob(dataUrl) {
+        var parts = String(dataUrl).split(',');
+        var mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+        var bin = atob(parts[1]);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new Blob([arr], { type: mime });
+    }
+
+    // Uploads the receipt straight to Supabase Storage and returns a
+    // "storage:<path>" reference. Returns null if anything goes wrong so the
+    // caller can fall back to storing the image inline — a storage outage
+    // should never block a booking.
+    async function uploadReceipt(dataUrl) {
+        try {
+            var signed = await fetch('/api/receipt-upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}'
+            });
+            if (!signed.ok) return null;
+            var info = await signed.json();
+            if (!info || !info.uploadUrl || !info.path) return null;
+
+            var put = await fetch(info.uploadUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/jpeg' },
+                body: dataUrlToBlob(dataUrl)
+            });
+            if (!put.ok) return null;
+            return 'storage:' + info.path;
+        } catch (err) {
+            console.warn('Receipt storage upload failed, storing inline:', err);
+            return null;
+        }
+    }
+
     // escapeHtml leaves quotes intact, which breaks out of an attribute value.
     function escapeAttr(str) {
         return String(str == null ? '' : str)
@@ -2220,6 +2257,12 @@
                         receiptData = await readAsDataUrl(receiptFile);
                     }
 
+                    UI.showProcessing('Uploading receipt...');
+
+                    // Prefer object storage; fall back to inline base64 so a
+                    // storage outage cannot block a booking.
+                    const receiptRef = (await uploadReceipt(receiptData)) || receiptData;
+
                     UI.showProcessing('Submitting booking...');
 
                     // Upserts on email: creates a new player or returns the existing one.
@@ -2236,7 +2279,7 @@
                         totalAmount: total,
                         paymentStatus: 'pending',
                         paymentMethod: paymentMethod,
-                        receiptImage: receiptData
+                        receiptImage: receiptRef
                     });
 
                     sendBookingEmail('pending', reservation, name, email);
@@ -2569,8 +2612,19 @@
             try {
                 var full = await Data._api('reservations?id=' + id);
                 var container = document.getElementById('receiptContainer');
-                if (container && full && full.receiptImage && full.receiptImage.indexOf('data:image/') === 0) {
-                    container.innerHTML = '<div style="margin-top:12px; text-align:center;"><img src="' + full.receiptImage + '" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--gray-200);" alt="Payment Receipt"></div>';
+                var ref = full && full.receiptImage;
+                var src = null;
+
+                if (ref && ref.indexOf('storage:') === 0) {
+                    // Private bucket: exchange the path for a short-lived signed URL.
+                    var signed = await Data._api('receipt-view', 'POST', { path: ref.slice(8) });
+                    src = signed && signed.url;
+                } else if (ref && ref.indexOf('data:image/') === 0) {
+                    src = ref; // legacy inline receipts
+                }
+
+                if (container && src) {
+                    container.innerHTML = '<div style="margin-top:12px; text-align:center;"><img src="' + escapeAttr(src) + '" style="max-width:100%; max-height:400px; border-radius:8px; border:1px solid var(--gray-200);" alt="Payment Receipt"></div>';
                 } else if (container) {
                     container.innerHTML = '<p class="text-muted text-center" style="margin-top:12px;">No receipt uploaded</p>';
                 }
