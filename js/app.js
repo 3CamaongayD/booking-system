@@ -552,18 +552,13 @@
         var schedNow = isWknd ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
         var tab = State.homeTab || 'book';
 
+        // Kept deliberately short: visitors arrive here to book, so the grid
+        // should reach the first screen on a phone rather than sit below a
+        // full page of decoration.
         var html = '<div class="hero">' +
-            '<h1>Ready to <span>Serve, Smash, or Rally?</span>' +
-            '<span class="hero-sub">welcome to <strong>Kepler Insight School</strong>!</span></h1>' +
-            '<p>Book your pickleball court, badminton court, or table tennis table online instantly and get ready to play!</p>' +
-        '</div>';
-
-        html += '<div class="venue-header" style="margin-top:20px;">' +
-            '<div class="venue-stats-row" style="border-top:none;padding-top:0;">' +
-                '<div class="venue-stat"><div class="venue-stat-icon">&#127934;</div><div><strong>' + CONFIG.courts.length + '</strong><br><small>Facilities</small></div></div>' +
-                '<div class="venue-stat"><div class="venue-stat-icon">&#128347;</div><div><small>open</small><br><strong>' + formatHour(schedNow.start) + '-' + formatHour(schedNow.end) + '</strong></div></div>' +
-                '<div class="venue-stat"><div class="venue-stat-icon">&#128197;</div><div><strong>' + Data.getReservationsByDate(todayStr()).length + '</strong><br><small>Today\'s Bookings</small></div></div>' +
-            '</div>' +
+            '<h1>Ready to <span>Serve, Smash, or Rally?</span></h1>' +
+            '<p>Book a court at <strong>Kepler Insight School</strong> &mdash; open today ' +
+                formatHour(schedNow.start) + '&ndash;' + formatHour(schedNow.end) + '</p>' +
         '</div>';
 
         html += '<div class="venue-tabs">' +
