@@ -1521,8 +1521,8 @@ tbody tr:hover { background: var(--gray-50); }
 .date-short { display: none; }
 .book-date-label {
     font-family: var(--font-heading);
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 700;
     color: var(--black);
     flex: 1;
     text-align: center;
@@ -2196,7 +2196,7 @@ footer p:last-child { margin-top: 4px; color: var(--gray-500); }
         flex: 1 1 100%;
         order: -1;
         text-align: center;
-        font-size: 14px;
+        font-size: 17px;
     }
 
     #app { padding: 20px 16px; }
@@ -2254,7 +2254,7 @@ footer p:last-child { margin-top: 4px; color: var(--gray-500); }
     .venue-title h1 { font-size: 18px; }
     .grid-legend { gap: 8px; font-size: 11px; flex-wrap: wrap; }
     .book-date-nav { gap: 6px; }
-    .book-date-label { font-size: 13px; }
+    .book-date-label { font-size: 16px; }
     .co-time { font-size: 16px; }
     .co-amount { font-size: 15px; }
     .checkout-title { font-size: 22px; }
