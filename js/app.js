@@ -502,17 +502,25 @@
             document.getElementById('modal-overlay').classList.add('hidden');
         },
 
+        // Reuses the existing overlay so repeated calls update the message
+        // instead of stacking. Stacked overlays compounded to near-opaque
+        // black, and hideProcessing only ever removed one of them.
         showProcessing(message) {
-            const el = document.createElement('div');
-            el.id = 'processing';
-            el.className = 'processing-overlay';
+            let el = document.getElementById('processing');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'processing';
+                el.className = 'processing-overlay';
+                document.body.appendChild(el);
+            }
             el.innerHTML = `<div class="spinner"></div><p>${escapeHtml(message)}</p>`;
-            document.body.appendChild(el);
         },
 
         hideProcessing() {
-            const el = document.getElementById('processing');
-            if (el) el.remove();
+            // Query by class, not id: duplicate ids only ever return the first.
+            document.querySelectorAll('.processing-overlay').forEach(function (el) {
+                el.remove();
+            });
         }
     };
 
@@ -2245,7 +2253,6 @@
                         // the original, which only fits if it was small to begin with.
                         console.warn('Receipt compression failed, using original:', compressErr);
                         if (receiptFile.size > 3 * 1024 * 1024) {
-                            UI.hideProcessing();
                             UI.toast('Could not process that image. Try a screenshot or a smaller photo.', 'error');
                             return;
                         }
@@ -2283,11 +2290,9 @@
                     State.lastConfirmation._playerName = name;
                     State.lastConfirmation._playerEmail = email;
                     State.booking = { court: null, date: null, slots: [], sport: null };
-                    UI.hideProcessing();
                     UI.toast('Booking submitted! Awaiting admin verification.', 'success');
                     location.hash = '#confirmation';
                 } catch (err) {
-                    UI.hideProcessing();
                     UI.toast(
                         String(err && err.message).indexOf('429') >= 0
                             ? 'Too many bookings from this network. Please try again later.'
@@ -2295,6 +2300,10 @@
                         'error'
                     );
                     console.error('Booking error:', err);
+                } finally {
+                    // Every exit path clears the overlay, including the early
+                    // return when an image cannot be processed.
+                    UI.hideProcessing();
                 }
             })();
         },
