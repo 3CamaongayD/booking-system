@@ -1501,8 +1501,8 @@
                     <div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="220" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map showing the location of Kepler Insight School"></iframe></div>
 
                     <figure class="street-view">
-                        <div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m17!1m12!1m3!1d266.50525246900133!2d124.02378486432609!3d10.51911486193055!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e1!3m2!1sen!2sph!4v1789529689743!5m2!1sen!2sph" width="100%" height="220" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="Aerial view of the venue"></iframe></div>
-                        <figcaption>Aerial view &mdash; look for the red-roofed building on the main road.</figcaption>
+                        <div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!4v1789529942714!6m8!1m7!1sTe7PzupviKy3vAlazn2L1Q!2m2!1d10.51922265992452!2d124.0241411830555!3f248.0186!4f0!5f0.7820865974627469" width="100%" height="240" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="Street view of the venue entrance"></iframe></div>
+                        <figcaption>Street view &mdash; look for the red-roofed building. Drag to look around.</figcaption>
                     </figure>
                     <div class="contact-info" style="margin-top:12px;">
                         <p>Kepler Insight School of Science and Arts<br>Danao City, Cebu, Philippines</p>
