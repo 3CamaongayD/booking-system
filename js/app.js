@@ -554,6 +554,7 @@
             dashboard: renderDashboard,
             checkout: renderCheckout,
             faq: renderFAQ,
+            contact: renderContact,
             admin: renderAdmin,
             confirmation: renderConfirmation
         };
@@ -1382,7 +1383,7 @@
         const faqs = [
             {
                 q: 'How do I book a court or table?',
-                a: 'Click "Book a Court" from the navigation menu. Select your preferred facility (pickleball court, badminton court, or table tennis table), pick a date from the calendar, choose your time slots, then proceed to checkout. Enter your name, contact number, and email, select a payment method, and confirm your booking.'
+                a: 'From the Home page, use the Book tab. Pick a date, then tap the time slots you want on your preferred facility (pickleball court, badminton court, or table tennis table). Proceed to checkout, enter your name, contact number, and email, choose a payment method, upload your payment receipt, and confirm.'
             },
             {
                 q: 'What are the operating hours?',
@@ -1398,7 +1399,7 @@
             },
             {
                 q: 'What payment methods are accepted?',
-                a: 'We accept GCash, Maribank, and debit cards. Online payments are processed securely at checkout.'
+                a: 'We accept GCash and Maribank. Send your payment to the account number shown at checkout, then upload a screenshot of your receipt. Your booking is confirmed once an admin verifies the payment.'
             },
             {
                 q: 'Can I cancel or reschedule my booking?',
@@ -1445,7 +1446,69 @@
 
             <div class="faq-cta">
                 <p>Still have questions? Contact the school administration or visit us during operating hours.</p>
-                <a href="#book" class="btn btn-primary">Book a Court Now</a>
+                <a href="#contact" class="btn btn-primary">Contact Us</a>
+            </div>
+        `;
+    }
+
+    // --- CONTACT PAGE ---
+    function renderContact(container) {
+        var sched = getSchedule(todayStr());
+        container.innerHTML = `
+            <div class="page-header">
+                <h1>Contact Us</h1>
+                <p>For inquiries, reservations, or assistance</p>
+                <div class="accent-line"></div>
+            </div>
+
+            <div class="about-layout">
+                <div class="about-card">
+                    <h3>&#128222; Get in Touch</h3>
+                    <div style="display:flex; flex-direction:column; gap:14px; margin-top:14px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:18px;">&#128222;</span>
+                            <div>
+                                <div style="font-size:12px; color:var(--gray-500);">Phone</div>
+                                <a href="tel:09312032087" style="font-weight:600;">0931 203 2087</a>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:18px;">&#9993;</span>
+                            <div>
+                                <div style="font-size:12px; color:var(--gray-500);">Bookings</div>
+                                <a href="mailto:booking@keplerinsightschool.com" style="font-weight:600; word-break:break-all;">booking@keplerinsightschool.com</a>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:18px;">&#9993;</span>
+                            <div>
+                                <div style="font-size:12px; color:var(--gray-500);">General enquiries</div>
+                                <a href="mailto:docamaongay9@gmail.com" style="font-weight:600; word-break:break-all;">docamaongay9@gmail.com</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top:24px;">&#128347; Opening Hours</h3>
+                    <div class="hour-row"><span>Monday &ndash; Friday</span><strong>6:00 PM &ndash; 12:00 AM</strong></div>
+                    <div class="hour-row"><span>Saturday &ndash; Sunday</span><strong>4:00 PM &ndash; 12:00 AM</strong></div>
+                    <p class="text-muted" style="font-size:13px; margin-top:10px;">
+                        Today we are open ${formatHour(sched.start)} &ndash; ${formatHour(sched.end)}.
+                    </p>
+                </div>
+
+                <div class="about-card">
+                    <h3>&#128205; Find Us</h3>
+                    <div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="220" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>
+                    <div class="contact-info" style="margin-top:12px;">
+                        <p>Kepler Insight School of Science and Arts<br>Danao City, Cebu, Philippines</p>
+                        <a href="https://maps.app.goo.gl/S8fPwLjrYJn6UCsZA" target="_blank" rel="noopener" class="btn btn-outline btn-sm mt-1">&#128204; Get Directions</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-cta">
+                <p>Looking for something specific? Our FAQ covers booking, rates, and court rules.</p>
+                <a href="#faq" class="btn btn-outline">Read the FAQ</a>
             </div>
         `;
     }
