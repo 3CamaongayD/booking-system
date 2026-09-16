@@ -18,6 +18,12 @@
             weekday: { start: 18, end: 24 },
             weekend: { start: 16, end: 24 }
         },
+        // Specific dates that open outside their usual weekday/weekend hours.
+        // Keyed YYYY-MM-DD; overrides the weekday/weekend schedule entirely.
+        scheduleExceptions: {
+            '2026-09-18': { start: 16, end: 24 },
+            '2026-09-21': { start: 16, end: 24 }
+        },
         rates: {
             pickleball: 300,
             badminton: 300,
@@ -91,8 +97,13 @@
         return d.getDay() === 0 || d.getDay() === 6;
     }
 
+    function getSchedule(dateStr) {
+        return CONFIG.scheduleExceptions[dateStr]
+            || (isWeekend(dateStr) ? CONFIG.schedule.weekend : CONFIG.schedule.weekday);
+    }
+
     function getAvailableHours(dateStr) {
-        const sched = isWeekend(dateStr) ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+        const sched = getSchedule(dateStr);
         const hours = [];
         for (let h = sched.start; h < sched.end; h++) hours.push(h);
         return hours;
@@ -555,9 +566,7 @@
 
     // --- HOME / VENUE PAGE ---
     function renderHome(container) {
-        var today = new Date();
-        var isWknd = today.getDay() === 0 || today.getDay() === 6;
-        var schedNow = isWknd ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+        var schedNow = getSchedule(todayStr());
         var tab = State.homeTab || 'book';
 
         // Kept deliberately short: visitors arrive here to book, so the grid
@@ -938,14 +947,17 @@
         html += `</div></div>`;
 
         if (State.booking.date) {
-            const weekend = isWeekend(State.booking.date);
-            const sched = weekend ? CONFIG.schedule.weekend : CONFIG.schedule.weekday;
+            const sched = getSchedule(State.booking.date);
             var selCourtCfg = getCourtConfig(State.booking.court);
             var rateNote = '';
             if (selCourtCfg && (selCourtCfg.type === 'table-tennis' || State.booking.sport === 'badminton')) {
                 rateNote = ' (Flat rate)';
             } else {
-                rateNote = weekend ? ' (Off-Peak & Peak rates)' : ' (Peak rate only)';
+                // Keyed off the day's actual opening hour, not weekend/weekday,
+                // so early-opening exception dates read correctly.
+                rateNote = sched.start < CONFIG.rates.peakStart
+                    ? ' (Off-Peak & Peak rates)'
+                    : ' (Peak rate only)';
             }
             html += `<div class="date-info">
                 <strong>${formatDate(State.booking.date)}</strong><br>
