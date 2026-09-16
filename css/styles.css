@@ -1462,16 +1462,8 @@ tbody tr:hover { background: var(--gray-50); }
     font-size: 13px;
     color: var(--gray-500);
 }
-/* Hidden via onerror until img/street-view.jpg exists, so a missing
-   photo leaves no broken image behind. */
 .street-view {
-    margin: 0;
-}
-.street-view img {
-    width: 100%;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-    display: block;
+    margin: 14px 0 0;
 }
 .street-view figcaption {
     font-size: 12px;
