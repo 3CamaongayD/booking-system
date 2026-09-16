@@ -1499,9 +1499,18 @@
                 <div class="about-card">
                     <h3>&#128205; Find Us</h3>
                     <div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="220" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>
+                    <figure class="street-view" style="margin-top:14px;">
+                        <img src="img/street-view.jpg" alt="Street view of the entrance on the main road"
+                             loading="lazy"
+                             onerror="this.closest('.street-view').style.display='none'">
+                        <figcaption>Look for the red-roofed building &mdash; the gate is just past it.</figcaption>
+                    </figure>
                     <div class="contact-info" style="margin-top:12px;">
                         <p>Kepler Insight School of Science and Arts<br>Danao City, Cebu, Philippines</p>
-                        <a href="https://maps.app.goo.gl/S8fPwLjrYJn6UCsZA" target="_blank" rel="noopener" class="btn btn-outline btn-sm mt-1">&#128204; Get Directions</a>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                            <a href="https://maps.app.goo.gl/S8fPwLjrYJn6UCsZA" target="_blank" rel="noopener" class="btn btn-outline btn-sm">&#128204; Get Directions</a>
+                            <a href="https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint=10.519099,124.023671" target="_blank" rel="noopener" class="btn btn-outline btn-sm">&#128065; Street View</a>
+                        </div>
                     </div>
                 </div>
             </div>
