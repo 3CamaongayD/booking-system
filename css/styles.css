@@ -1462,6 +1462,49 @@ tbody tr:hover { background: var(--gray-50); }
     font-size: 13px;
     color: var(--gray-500);
 }
+/* --- Reclub --- */
+.reclub-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.reclub-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+.reclub-sub {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin: 2px 0 0;
+}
+.reclub-code {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--gray-50);
+    border: 1px dashed var(--gray-300);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+}
+.reclub-code-label {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--gray-400);
+}
+.reclub-code-value {
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--black);
+    margin-right: auto;
+}
+
 .street-view {
     margin: 14px 0 0;
 }

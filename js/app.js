@@ -735,6 +735,22 @@
                 '</div>' +
             '</div>' +
             '<div class="about-col">' +
+                '<div class="about-card reclub-card">' +
+                    '<div class="reclub-head">' +
+                        '<img src="img/reclub-logo.png" alt="Reclub" class="reclub-logo">' +
+                        '<div>' +
+                            '<h3 style="margin:0;">Join Our Club</h3>' +
+                            '<p class="reclub-sub">Open play &amp; club activities on Reclub</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<p style="font-size:14px; color:var(--gray-600); margin:12px 0;">Kepler Insight Pickleball Club is using Reclub to organize activities. Join to see open play sessions and sign up.</p>' +
+                    '<div class="reclub-code">' +
+                        '<span class="reclub-code-label">Club code</span>' +
+                        '<span class="reclub-code-value" id="reclubCode">O737V</span>' +
+                        '<button class="btn btn-outline btn-sm" onclick="window.PKL.copyPlain(\'O737V\',\'Club code copied!\')">Copy</button>' +
+                    '</div>' +
+                    '<a href="https://reclub.co/clubs/@kepler-insight-pickleball-club" target="_blank" rel="noopener" class="btn btn-primary btn-block mt-2">Join on Reclub</a>' +
+                '</div>' +
                 '<div class="about-card"><h3>&#128205; Find Us</h3>' +
                     '<div class="map-container"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3925.0!2d124.023671!3d10.519099!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTDCsDMxJzA4LjgiTiAxMjTCsDAxJzI1LjIiRQ!5e0!3m2!1sen!2sph!4v1" width="100%" height="200" style="border:0;border-radius:8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>' +
                     '<div class="contact-info"><p>&#128205; Kepler Insight School of Science and Arts, Danao City, Cebu</p>' +
@@ -759,6 +775,7 @@
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I book a court or table?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Select your preferred facility from the Book tab, pick a date, choose your time slots, then proceed to checkout. Enter your details, select a payment method, and confirm your booking.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How much does it cost to play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Pickleball: &#8369;300/hr. Badminton: &#8369;300/hr. Table Tennis: Off-Peak &#8369;120/hr, Peak &#8369;200/hr (peak hours are 6 PM onwards).</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What payment methods are accepted?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>We accept GCash and Maribank. Send payment to the number provided at checkout, then upload your receipt screenshot for verification.</p></div></div>' +
+                '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>How do I join open play?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Kepler Insight Pickleball Club organizes open play and other activities through Reclub. Join with club code <strong>O737V</strong>, or <a href="https://reclub.co/clubs/@kepler-insight-pickleball-club" target="_blank" rel="noopener">open the club on Reclub</a>. Open play is separate from booking a court here &mdash; use Reclub to see sessions and sign up.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>Can I cancel or reschedule my booking?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please contact us at 0931 203 2087 or email booking@keplerinsightschool.com. Booking modifications are subject to availability. Payments are non-refundable.</p></div></div>' +
                 '<div class="faq-item" onclick="this.classList.toggle(\'open\')"><div class="faq-question"><span>What happens if I arrive late?</span><span class="faq-toggle">+</span></div><div class="faq-answer"><p>Please arrive at least 5 minutes before your booked time slot. Late arrivals will not receive extended playing time.</p></div></div>' +
             '</div>' +
@@ -1392,6 +1409,10 @@
             {
                 q: 'How much does it cost to play?',
                 a: 'Pickleball: ₱300/hr. Badminton: ₱300/hr. Table Tennis: Off-Peak ₱120/hr, Peak ₱200/hr (peak hours are 6 PM onwards).'
+            },
+            {
+                q: 'How do I join open play?',
+                a: 'Kepler Insight Pickleball Club organizes open play and other club activities through Reclub. Join using club code <strong>O737V</strong>, or open the club directly at <a href="https://reclub.co/clubs/@kepler-insight-pickleball-club" target="_blank" rel="noopener">reclub.co/clubs/@kepler-insight-pickleball-club</a>. Open play is organized separately from court bookings on this site — use Reclub to see upcoming sessions and sign up.'
             },
             {
                 q: 'Can I book multiple time slots at once?',
@@ -2490,8 +2511,18 @@
 
         closeModal() { UI.closeModal(); },
 
+        // Strips to digits — for phone/account numbers only.
         copyText(text, msg) {
             navigator.clipboard.writeText(text.replace(/[^\d]/g, '')).then(function() {
+                UI.toast(msg || 'Copied!', 'success');
+            }).catch(function() {
+                UI.toast('Could not copy', 'error');
+            });
+        },
+
+        // Copies verbatim. Codes like O737V would lose their letters above.
+        copyPlain(text, msg) {
+            navigator.clipboard.writeText(text).then(function() {
                 UI.toast(msg || 'Copied!', 'success');
             }).catch(function() {
                 UI.toast('Could not copy', 'error');
