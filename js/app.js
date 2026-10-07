@@ -761,13 +761,15 @@
     function openPlayFacts(e) {
         var facts = [];
         if (e.startTime || e.endTime) {
-            facts.push({ icon: '&#128336;', text: [e.startTime, e.endTime].filter(Boolean).join(' &ndash; ') });
+            // Literal en-dash, not an entity: the text is escaped below.
+            facts.push({ icon: '&#128336;', text: [e.startTime, e.endTime].filter(Boolean).join(' – ') });
         }
         if (e.venue) facts.push({ icon: '&#128205;', text: e.venue });
         if (e.courts) facts.push({ icon: '&#127934;', text: e.courts + ' court' + (e.courts > 1 ? 's' : '') });
         if (e.maxPlayers) facts.push({ icon: '&#128101;', text: e.maxPlayers + ' players only' });
         return facts.map(function (f) {
-            return '<div class="op-fact"><span>' + f.icon + '</span><span>' + escapeHtml(f.text) + '</span></div>';
+            return '<div class="op-fact"><span class="op-fact-icon">' + f.icon + '</span>' +
+                '<span>' + escapeHtml(f.text) + '</span></div>';
         }).join('');
     }
 
@@ -782,7 +784,8 @@
         html += '</div></div>';
 
         if (!compact && e.address) {
-            html += '<p class="op-address">&#127968; ' + escapeHtml(e.address) + '</p>';
+            html += '<p class="op-address"><span class="op-fact-icon">&#127968;</span>' +
+                '<span>' + escapeHtml(e.address) + '</span></p>';
         }
 
         if (!compact && e.details) {

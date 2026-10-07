@@ -1540,15 +1540,29 @@ tbody tr:hover { background: var(--gray-50); }
 }
 .op-fact {
     display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 13px;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 14px;
     color: var(--gray-600);
 }
+/* Emoji glyph widths vary by platform, so the icon needs a fixed column
+   or the labels beside them end up ragged. */
+.op-fact-icon {
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+    line-height: inherit;
+}
 .op-address {
-    font-size: 13px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 14px;
     color: var(--gray-500);
     margin: 12px 0 0;
+}
+.op-address .op-fact-icon {
+    color: var(--gray-500);
 }
 .op-details {
     font-size: 13.5px;
