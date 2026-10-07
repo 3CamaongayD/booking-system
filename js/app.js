@@ -51,6 +51,9 @@
             scheduleDate: todayStr(),
             bookingFilter: { q: '', status: 'all', from: '', to: '' },
             editingOpenPlay: null,
+            editingExpense: null,
+            expenseFilter: { q: '', category: 'all', from: '', to: '' },
+            refocusExpenseSearch: false,
             selectedPending: [],
             refocusSearch: false
         }
@@ -427,6 +430,34 @@
         },
         isSlotBlocked(courtId, date, hour) {
             return this._overrides.find(function(o) { return o.courtId === courtId && o.date === date && o.hour === hour; }) || false;
+        },
+
+        // Admin-only, so loaded on demand rather than in init() — a visitor
+        // must never fire a request that just 401s.
+        _expenses: [],
+        _expensesLoaded: false,
+        async ensureExpenses(force) {
+            if (this._expensesLoaded && !force) return this._expenses;
+            this._expenses = await this._api('expenses');
+            this._expensesLoaded = true;
+            return this._expenses;
+        },
+        getExpenses() { return this._expenses; },
+        async addExpense(x) {
+            x.id = genId();
+            var saved = await this._api('expenses', 'POST', x);
+            this._expenses.unshift(saved);
+            return saved;
+        },
+        async updateExpense(id, updates) {
+            var saved = await this._api('expenses', 'PATCH', Object.assign({ id: id }, updates));
+            var idx = this._expenses.findIndex(function (x) { return x.id === id; });
+            if (idx >= 0) this._expenses[idx] = saved;
+            return saved;
+        },
+        async deleteExpense(id) {
+            await this._api('expenses', 'DELETE', { id: id });
+            this._expenses = this._expenses.filter(function (x) { return x.id !== id; });
         },
 
         getOpenPlay() { return this._openPlay; },
@@ -1758,6 +1789,7 @@
                 <button class="tab ${tab === 'schedule' ? 'active' : ''}" onclick="window.PKL.adminTab('schedule')">Schedule</button>
                 <button class="tab ${tab === 'overrides' ? 'active' : ''}" onclick="window.PKL.adminTab('overrides')">Overrides</button>
                 <button class="tab ${tab === 'openplay' ? 'active' : ''}" onclick="window.PKL.adminTab('openplay')">Open Play</button>
+                <button class="tab ${tab === 'expenses' ? 'active' : ''}" onclick="window.PKL.adminTab('expenses')">Expenses</button>
                 <button class="tab ${tab === 'players' ? 'active' : ''}" onclick="window.PKL.adminTab('players')">Players</button>
                 <button class="tab ${tab === 'reports' ? 'active' : ''}" onclick="window.PKL.adminTab('reports')">Reports</button>
             </div>
@@ -1770,6 +1802,7 @@
         else if (tab === 'schedule') renderAdminSchedule(content);
         else if (tab === 'overrides') renderAdminOverrides(content);
         else if (tab === 'openplay') renderAdminOpenPlay(content);
+        else if (tab === 'expenses') renderAdminExpenses(content);
         else if (tab === 'players') renderAdminPlayers(content);
         else if (tab === 'reports') renderAdminReports(content);
     }
@@ -1997,6 +2030,191 @@
         content.innerHTML = html;
     }
 
+    var EXPENSE_CATEGORIES = [
+        { value: 'maintenance', label: 'Maintenance' },
+        { value: 'salary', label: 'Salary' },
+        { value: 'equipment', label: 'Equipment' },
+        { value: 'utilities', label: 'Utilities' },
+        { value: 'supplies', label: 'Supplies' },
+        { value: 'other', label: 'Other' }
+    ];
+
+    function expenseCategoryLabel(v) {
+        var c = EXPENSE_CATEGORIES.find(function (x) { return x.value === v; });
+        return c ? c.label : 'Other';
+    }
+
+    function renderAdminExpenses(content) {
+        // Expenses load on demand, so show a placeholder on first open.
+        if (!Data._expensesLoaded) {
+            content.innerHTML = '<div class="card"><p class="text-muted text-center" style="padding:24px;">Loading expenses&hellip;</p></div>';
+            Data.ensureExpenses().then(function () {
+                if (State.admin.activeTab === 'expenses') renderAdminExpenses(content);
+            }).catch(function () {
+                content.innerHTML = '<div class="card"><p class="text-muted text-center" style="padding:24px;">Could not load expenses.</p></div>';
+            });
+            return;
+        }
+
+        var all = Data.getExpenses();
+        var f = State.admin.expenseFilter;
+        var editing = State.admin.editingExpense;
+        var e = editing || {};
+        var today = todayStr();
+        var thisMonth = today.slice(0, 7);
+
+        function val(v) { return v === null || v === undefined ? '' : escapeAttr(v); }
+
+        var filtered = all.filter(function (x) {
+            if (f.category !== 'all' && x.category !== f.category) return false;
+            if (f.from && x.date < f.from) return false;
+            if (f.to && x.date > f.to) return false;
+            if (f.q) {
+                var hay = (x.item + ' ' + x.note + ' ' + expenseCategoryLabel(x.category)).toLowerCase();
+                if (hay.indexOf(f.q.toLowerCase()) < 0) return false;
+            }
+            return true;
+        });
+
+        var sum = function (list) {
+            return list.reduce(function (s, x) { return s + x.amount; }, 0);
+        };
+        var totalAll = sum(all);
+        var totalMonth = sum(all.filter(function (x) { return x.date.slice(0, 7) === thisMonth; }));
+        var totalFiltered = sum(filtered);
+        var filtersActive = f.q || f.category !== 'all' || f.from || f.to;
+
+        // Revenue on the same basis as the Reports tab, so Net matches.
+        var paidRes = Data.getReservations().filter(function (r) {
+            return r.paymentStatus === 'paid' || r.paymentStatus === 'confirmed';
+        });
+        var revenueAll = paidRes.reduce(function (s, r) { return s + r.totalAmount; }, 0);
+        var revenueMonth = paidRes
+            .filter(function (r) { return r.date.slice(0, 7) === thisMonth; })
+            .reduce(function (s, r) { return s + r.totalAmount; }, 0);
+
+        var byCategory = EXPENSE_CATEGORIES.map(function (c) {
+            var list = all.filter(function (x) { return x.category === c.value; });
+            return { label: c.label, total: sum(list), count: list.length };
+        }).filter(function (c) { return c.count > 0; })
+          .sort(function (a, b) { return b.total - a.total; });
+
+        var html = '<div class="report-grid">' +
+            '<div class="report-card"><h4>All-Time Revenue</h4>' +
+                '<div class="report-value">' + formatCurrency(revenueAll) + '</div>' +
+                '<div class="report-sub">Approved bookings</div></div>' +
+            '<div class="report-card"><h4>All-Time Expenses</h4>' +
+                '<div class="report-value" style="color:var(--danger);">-' + formatCurrency(totalAll) + '</div>' +
+                '<div class="report-sub">' + all.length + ' entr' + (all.length === 1 ? 'y' : 'ies') + '</div></div>' +
+            '<div class="report-card"><h4>Net Profit</h4>' +
+                '<div class="report-value" style="color:' + (revenueAll - totalAll >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' +
+                formatCurrency(revenueAll - totalAll) + '</div>' +
+                '<div class="report-sub">All time, after expenses</div></div>' +
+            '<div class="report-card"><h4>Net This Month</h4>' +
+                '<div class="report-value" style="color:' + (revenueMonth - totalMonth >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' +
+                formatCurrency(revenueMonth - totalMonth) + '</div>' +
+                '<div class="report-sub">' + formatCurrency(revenueMonth) + ' in, ' + formatCurrency(totalMonth) + ' out</div></div>' +
+        '</div>';
+
+        html += '<div class="card mb-3">' +
+            '<div class="card-header">' + (editing ? 'Edit Expense' : 'Record an Expense') + '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label class="required">Date</label>' +
+                    '<input type="date" class="form-control" id="exDate" value="' + (editing ? val(e.date) : today) + '"></div>' +
+                '<div class="form-group"><label class="required">Category</label>' +
+                    '<select class="form-control" id="exCategory">' +
+                        EXPENSE_CATEGORIES.map(function (c) {
+                            return '<option value="' + c.value + '"' +
+                                (e.category === c.value ? ' selected' : '') + '>' + c.label + '</option>';
+                        }).join('') +
+                    '</select></div>' +
+            '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label class="required">Item / Description</label>' +
+                    '<input type="text" class="form-control" id="exItem" value="' + val(e.item) + '" placeholder="Net replacement, coach salary, electricity..."></div>' +
+                '<div class="form-group"><label class="required">Amount</label>' +
+                    '<input type="number" class="form-control" id="exAmount" value="' + val(e.amount) + '" placeholder="0" min="0" step="0.01"></div>' +
+            '</div>' +
+            '<div class="form-group"><label>Note</label>' +
+                '<input type="text" class="form-control" id="exNote" value="' + val(e.note) + '" placeholder="Optional detail, supplier, receipt no."></div>' +
+            '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+                '<button class="btn btn-primary" onclick="window.PKL.saveExpense()">' + (editing ? 'Save Changes' : 'Add Expense') + '</button>' +
+                (editing ? '<button class="btn btn-outline" onclick="window.PKL.cancelEditExpense()">Cancel</button>' : '') +
+            '</div>' +
+        '</div>';
+
+        if (byCategory.length > 0) {
+            html += '<div class="card mb-3"><div class="card-header">Spending by Category</div>' +
+                '<div class="table-container"><table>' +
+                '<thead><tr><th>Category</th><th>Entries</th><th>Total</th><th>Share</th></tr></thead><tbody>' +
+                byCategory.map(function (c) {
+                    var pct = totalAll > 0 ? Math.round(c.total / totalAll * 100) : 0;
+                    return '<tr>' +
+                        '<td><strong>' + c.label + '</strong></td>' +
+                        '<td>' + c.count + '</td>' +
+                        '<td>' + formatCurrency(c.total) + '</td>' +
+                        '<td>' + pct + '%</td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div></div>';
+        }
+
+        html += '<div class="card">' +
+            '<div class="card-header">Expenses (' + filtered.length + (filtersActive ? ' of ' + all.length : '') +
+                ') &mdash; ' + formatCurrency(totalFiltered) + '</div>' +
+            '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">' +
+                '<div style="flex:1; min-width:170px;">' +
+                    '<label style="font-size:12px; color:var(--gray-500);">Search</label>' +
+                    '<input type="text" class="form-control" id="expenseSearch" value="' + escapeAttr(f.q) + '" placeholder="Item or note..." oninput="window.PKL.expenseSearch(this.value)"></div>' +
+                '<div style="min-width:140px;"><label style="font-size:12px; color:var(--gray-500);">Category</label>' +
+                    '<select class="form-control" onchange="window.PKL.expenseFilterCategory(this.value)">' +
+                        '<option value="all"' + (f.category === 'all' ? ' selected' : '') + '>All</option>' +
+                        EXPENSE_CATEGORIES.map(function (c) {
+                            return '<option value="' + c.value + '"' + (f.category === c.value ? ' selected' : '') + '>' + c.label + '</option>';
+                        }).join('') +
+                    '</select></div>' +
+                '<div style="min-width:130px;"><label style="font-size:12px; color:var(--gray-500);">From</label>' +
+                    '<input type="date" class="form-control" value="' + f.from + '" onchange="window.PKL.expenseFilterDate(\'from\', this.value)"></div>' +
+                '<div style="min-width:130px;"><label style="font-size:12px; color:var(--gray-500);">To</label>' +
+                    '<input type="date" class="form-control" value="' + f.to + '" onchange="window.PKL.expenseFilterDate(\'to\', this.value)"></div>' +
+                (filtersActive ? '<button class="btn btn-outline btn-sm" onclick="window.PKL.clearExpenseFilters()">Clear</button>' : '') +
+            '</div>';
+
+        if (filtered.length === 0) {
+            html += '<p class="text-muted text-center" style="padding:24px;">' +
+                (filtersActive ? 'No expenses match these filters' : 'No expenses recorded yet') + '</p>';
+        } else {
+            html += '<div class="table-container"><table>' +
+                '<thead><tr><th>Date</th><th>Category</th><th>Item</th><th>Note</th><th>Amount</th><th></th></tr></thead><tbody>' +
+                filtered.map(function (x) {
+                    return '<tr>' +
+                        '<td>' + formatDate(x.date) + '</td>' +
+                        '<td><span class="badge badge-info">' + expenseCategoryLabel(x.category) + '</span></td>' +
+                        '<td><strong>' + escapeHtml(x.item) + '</strong></td>' +
+                        '<td class="text-muted">' + escapeHtml(x.note || '') + '</td>' +
+                        '<td><strong>' + formatCurrency(x.amount) + '</strong></td>' +
+                        '<td>' +
+                            '<button class="btn btn-outline btn-sm" onclick="window.PKL.editExpense(\'' + x.id + '\')">Edit</button> ' +
+                            '<button class="btn btn-danger btn-sm" onclick="window.PKL.deleteExpense(\'' + x.id + '\')" style="margin-left:4px;">Delete</button>' +
+                        '</td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div>';
+        }
+        html += '</div>';
+
+        content.innerHTML = html;
+
+        if (State.admin.refocusExpenseSearch) {
+            var el = document.getElementById('expenseSearch');
+            if (el) {
+                el.focus();
+                el.setSelectionRange(el.value.length, el.value.length);
+            }
+            State.admin.refocusExpenseSearch = false;
+        }
+    }
+
     function renderAdminOpenPlay(content) {
         var events = Data.getOpenPlay().slice().sort(function (a, b) {
             return b.eventDate.localeCompare(a.eventDate);
@@ -2191,6 +2409,13 @@
     }
 
     function renderAdminReports(content) {
+        // Net figures need expenses; fetch once then re-render in place.
+        if (!Data._expensesLoaded) {
+            Data.ensureExpenses().then(function () {
+                if (State.admin.activeTab === 'reports') renderAdminReports(content);
+            }).catch(function () { /* reports still render gross-only */ });
+        }
+
         const allRes = Data.getReservations().filter(r => r.paymentStatus === 'paid' || r.paymentStatus === 'confirmed');
         const today = todayStr();
 
@@ -2268,6 +2493,15 @@
         }
         var maxWeekly = Math.max.apply(null, weeklyData.map(d => d.revenue).concat([1]));
 
+        var expenses = Data.getExpenses();
+        var expTotal = expenses.reduce(function (s, x) { return s + x.amount; }, 0);
+        var expMonth = expenses
+            .filter(function (x) { return x.date.slice(0, 7) === today.slice(0, 7); })
+            .reduce(function (s, x) { return s + x.amount; }, 0);
+        var netTotal = totalRevenue - expTotal;
+        var netMonth = monthRevenue - expMonth;
+        var netClass = function (v) { return v >= 0 ? 'var(--success)' : 'var(--danger)'; };
+
         content.innerHTML = `
             <div class="report-grid">
                 <div class="report-card">
@@ -2289,6 +2523,29 @@
                     <h4>${lastMonthName}</h4>
                     <div class="report-value">${formatCurrency(lastMonthRevenue)}</div>
                     <div class="report-sub">${lastMonthRes.length} booking${lastMonthRes.length !== 1 ? 's' : ''}</div>
+                </div>
+            </div>
+
+            <div class="report-grid" style="margin-top:12px;">
+                <div class="report-card">
+                    <h4>Expenses This Month</h4>
+                    <div class="report-value" style="color:var(--danger);">-${formatCurrency(expMonth)}</div>
+                    <div class="report-sub">${formatCurrency(monthRevenue)} revenue in</div>
+                </div>
+                <div class="report-card">
+                    <h4>Net This Month</h4>
+                    <div class="report-value" style="color:${netClass(netMonth)};">${formatCurrency(netMonth)}</div>
+                    <div class="report-sub">After expenses</div>
+                </div>
+                <div class="report-card">
+                    <h4>All-Time Expenses</h4>
+                    <div class="report-value" style="color:var(--danger);">-${formatCurrency(expTotal)}</div>
+                    <div class="report-sub">${expenses.length} entr${expenses.length === 1 ? 'y' : 'ies'}</div>
+                </div>
+                <div class="report-card">
+                    <h4>Net Profit</h4>
+                    <div class="report-value" style="color:${netClass(netTotal)};">${formatCurrency(netTotal)}</div>
+                    <div class="report-sub">All time, after expenses</div>
                 </div>
             </div>
 
@@ -2749,6 +3006,105 @@
             });
         },
 
+        // Expenses (admin)
+        async saveExpense() {
+            function v(id) {
+                var el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            }
+            var data = {
+                date: v('exDate'),
+                category: v('exCategory'),
+                item: v('exItem'),
+                amount: v('exAmount'),
+                note: v('exNote')
+            };
+            if (!data.date || !data.item) {
+                UI.toast('Date and item are required', 'error');
+                return;
+            }
+            if (data.amount === '' || Number(data.amount) < 0 || !isFinite(Number(data.amount))) {
+                UI.toast('Enter a valid amount', 'error');
+                return;
+            }
+            var editing = State.admin.editingExpense;
+            try {
+                if (editing) {
+                    await Data.updateExpense(editing.id, data);
+                    UI.toast('Expense updated', 'success');
+                } else {
+                    await Data.addExpense(data);
+                    UI.toast('Expense recorded', 'success');
+                }
+                State.admin.editingExpense = null;
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminExpenses(content);
+            } catch (err) {
+                UI.toast('Could not save expense', 'error');
+                console.error('Expense save error:', err);
+            }
+        },
+
+        editExpense(id) {
+            State.admin.editingExpense = Data.getExpenses().find(function (x) { return x.id === id; }) || null;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+            window.scrollTo(0, 0);
+        },
+
+        cancelEditExpense() {
+            State.admin.editingExpense = null;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
+        deleteExpense(id) {
+            var x = Data.getExpenses().find(function (ex) { return ex.id === id; });
+            UI.showModal('Delete Expense?',
+                '<p>Delete <strong>' + escapeHtml(x ? x.item : '') + '</strong>' +
+                (x ? ' (' + formatCurrency(x.amount) + ')' : '') + '? This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-danger" onclick="window.PKL.confirmDeleteExpense(\'' + id + '\')">Delete</button>'
+            );
+        },
+
+        async confirmDeleteExpense(id) {
+            UI.closeModal();
+            try {
+                await Data.deleteExpense(id);
+                UI.toast('Expense deleted', 'info');
+            } catch (err) {
+                UI.toast('Could not delete expense', 'error');
+            }
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
+        expenseSearch(v) {
+            State.admin.expenseFilter.q = v;
+            State.admin.refocusExpenseSearch = true;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
+        expenseFilterCategory(v) {
+            State.admin.expenseFilter.category = v;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
+        expenseFilterDate(which, v) {
+            State.admin.expenseFilter[which] = v;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
+        clearExpenseFilters() {
+            State.admin.expenseFilter = { q: '', category: 'all', from: '', to: '' };
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminExpenses(content);
+        },
+
         // Open play (admin)
         _readOpenPlayForm() {
             function v(id) {
@@ -2873,6 +3229,7 @@
             else if (tab === 'schedule') renderAdminSchedule(content);
             else if (tab === 'overrides') renderAdminOverrides(content);
         else if (tab === 'openplay') renderAdminOpenPlay(content);
+        else if (tab === 'expenses') renderAdminExpenses(content);
             else if (tab === 'players') renderAdminPlayers(content);
             else if (tab === 'reports') renderAdminReports(content);
         },

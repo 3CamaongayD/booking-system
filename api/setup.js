@@ -76,6 +76,21 @@ module.exports = async (req, res) => {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        expense_date TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'maintenance',
+        item TEXT NOT NULL,
+        amount NUMERIC NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date DESC)
+    `;
+
+    await sql`
       CREATE TABLE IF NOT EXISTS open_play (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -124,6 +139,7 @@ module.exports = async (req, res) => {
     await sql`ALTER TABLE admin_login_attempts ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY`;
     await sql`ALTER TABLE open_play ENABLE ROW LEVEL SECURITY`;
+    await sql`ALTER TABLE expenses ENABLE ROW LEVEL SECURITY`;
 
     return res.status(200).json({ success: true, message: 'Database tables created' });
   } catch (error) {
