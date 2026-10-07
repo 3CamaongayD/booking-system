@@ -50,6 +50,7 @@
             activeTab: 'bookings',
             scheduleDate: todayStr(),
             bookingFilter: { q: '', status: 'all', from: '', to: '' },
+            editingOpenPlay: null,
             selectedPending: [],
             refocusSearch: false
         }
@@ -286,6 +287,7 @@
         _players: [],
         _reservations: [],
         _overrides: [],
+        _openPlay: [],
         _ready: false,
         _writing: false,
 
@@ -312,7 +314,10 @@
                 var results = await Promise.all([
                     this._api('players'),
                     this._api('reservations'),
-                    this._api('overrides')
+                    this._api('overrides'),
+                    // Open play is non-essential, so a failure here must not
+                    // take down the booking grid with it.
+                    this._api('open-play').catch(function () { return []; })
                 ]);
                 this._players = (results[0] || []).map(function(p) {
                     return { id: p.id, fullName: p.full_name || p.fullName, email: p.email, contactNumber: p.contact_number || p.contactNumber || '', emergencyContact: p.emergency_contact || p.emergencyContact || '', createdAt: p.created_at || p.createdAt };
@@ -323,12 +328,14 @@
                     return r;
                 });
                 this._overrides = results[2] || [];
+                this._openPlay = results[3] || [];
                 this._ready = true;
             } catch (e) {
                 console.error('Data init failed:', e);
                 this._players = [];
                 this._reservations = [];
                 this._overrides = [];
+                this._openPlay = [];
                 this._ready = true;
             }
         },
@@ -420,6 +427,31 @@
         },
         isSlotBlocked(courtId, date, hour) {
             return this._overrides.find(function(o) { return o.courtId === courtId && o.date === date && o.hour === hour; }) || false;
+        },
+
+        getOpenPlay() { return this._openPlay; },
+        // Upcoming and active only — what a visitor should actually see.
+        getUpcomingOpenPlay() {
+            var today = todayStr();
+            return this._openPlay
+                .filter(function(e) { return e.active && e.eventDate >= today; })
+                .sort(function(a, b) { return a.eventDate.localeCompare(b.eventDate); });
+        },
+        async addOpenPlay(e) {
+            e.id = genId();
+            var saved = await this._api('open-play', 'POST', e);
+            this._openPlay.push(saved);
+            return saved;
+        },
+        async updateOpenPlay(id, updates) {
+            var saved = await this._api('open-play', 'PATCH', Object.assign({ id: id }, updates));
+            var idx = this._openPlay.findIndex(function(e) { return e.id === id; });
+            if (idx >= 0) this._openPlay[idx] = saved;
+            return saved;
+        },
+        async deleteOpenPlay(id) {
+            await this._api('open-play', 'DELETE', { id: id });
+            this._openPlay = this._openPlay.filter(function(e) { return e.id !== id; });
         },
 
         isSlotAvailable(courtId, date, hour) {
@@ -711,7 +743,106 @@
             html += '</div></div>';
         }
 
+        html += renderOpenPlaySection();
+
         content.innerHTML = html;
+    }
+
+    // --- OPEN PLAY ---
+    function openPlayDateBadge(dateStr) {
+        var d = new Date(dateStr + 'T00:00:00');
+        return '<div class="op-date">' +
+            '<span class="op-dow">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + '</span>' +
+            '<span class="op-day">' + d.getDate() + '</span>' +
+            '<span class="op-mon">' + d.toLocaleDateString('en-US', { month: 'short' }) + '</span>' +
+        '</div>';
+    }
+
+    function openPlayFacts(e) {
+        var facts = [];
+        if (e.startTime || e.endTime) {
+            facts.push({ icon: '&#128336;', text: [e.startTime, e.endTime].filter(Boolean).join(' &ndash; ') });
+        }
+        if (e.venue) facts.push({ icon: '&#128205;', text: e.venue });
+        if (e.courts) facts.push({ icon: '&#127934;', text: e.courts + ' court' + (e.courts > 1 ? 's' : '') });
+        if (e.maxPlayers) facts.push({ icon: '&#128101;', text: e.maxPlayers + ' players only' });
+        return facts.map(function (f) {
+            return '<div class="op-fact"><span>' + f.icon + '</span><span>' + escapeHtml(f.text) + '</span></div>';
+        }).join('');
+    }
+
+    // `compact` is the popup: headline facts only, no long body text.
+    function openPlayCard(e, compact) {
+        var html = '<div class="op-card">';
+        html += '<div class="op-head">';
+        html += openPlayDateBadge(e.eventDate);
+        html += '<div class="op-headings">';
+        html += '<h3>' + escapeHtml(e.title) + '</h3>';
+        html += '<div class="op-facts">' + openPlayFacts(e) + '</div>';
+        html += '</div></div>';
+
+        if (!compact && e.address) {
+            html += '<p class="op-address">&#127968; ' + escapeHtml(e.address) + '</p>';
+        }
+
+        if (!compact && e.details) {
+            html += '<div class="op-details">' + escapeHtml(e.details).replace(/\n/g, '<br>') + '</div>';
+        }
+
+        if (!compact && (e.paymentNumber || e.paymentName)) {
+            html += '<div class="op-pay">' +
+                '<span class="op-pay-label">GCash</span>' +
+                // Read the value from the DOM rather than inlining it into the
+                // handler: a quote in the field would otherwise break out of
+                // the JS string literal.
+                (e.paymentNumber
+                    ? '<span class="op-pay-number" id="opPay-' + escapeAttr(e.id) + '">' + escapeHtml(e.paymentNumber) + '</span>' +
+                      '<button class="btn btn-outline btn-sm" onclick="window.PKL.copyPlain(' +
+                      'document.getElementById(\'opPay-' + escapeAttr(e.id) + '\').textContent,' +
+                      '\'GCash number copied!\')">Copy</button>'
+                    : '') +
+                (e.paymentName ? '<span class="op-pay-name">' + escapeHtml(e.paymentName) + '</span>' : '') +
+            '</div>';
+        }
+
+        html += '<div class="op-foot">';
+        html += '<span class="op-price">' + (e.price !== null && e.price !== undefined ? formatCurrency(e.price) + ' <small>/player</small>' : 'Free') + '</span>';
+        if (e.joinUrl) {
+            html += '<a href="' + escapeAttr(e.joinUrl) + '" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Request to Join</a>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    function renderOpenPlaySection() {
+        var events = Data.getUpcomingOpenPlay();
+        if (events.length === 0) return '';
+
+        var html = '<div class="op-section">';
+        html += '<div class="op-section-head">' +
+            '<h3>&#128293; Open Play</h3>' +
+            '<p>Organized sessions &mdash; separate from booking a court above.</p>' +
+        '</div>';
+        html += events.map(function (e) { return openPlayCard(e, false); }).join('');
+        html += '</div>';
+        return html;
+    }
+
+    // Once per browser session, so navigating the site does not re-trigger it.
+    function maybeShowOpenPlayPopup() {
+        if (sessionStorage.getItem('pkl_openPlaySeen')) return;
+        var events = Data.getUpcomingOpenPlay().filter(function (e) { return e.showPopup; });
+        if (events.length === 0) return;
+
+        sessionStorage.setItem('pkl_openPlaySeen', '1');
+        // Literal emoji, not an entity: showModal escapes the title.
+        UI.showModal(
+            '🔥 Open Play',
+            '<p class="text-muted" style="font-size:13px;margin-bottom:12px;">Upcoming session at Kepler Insight</p>' +
+                openPlayCard(events[0], true),
+            '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Maybe later</button>' +
+            '<button class="btn btn-primary" onclick="window.PKL.closeModal();window.PKL.homeTab(\'book\');">See details</button>'
+        );
     }
 
     function renderAboutTab(content) {
@@ -1624,6 +1755,7 @@
                 <button class="tab ${tab === 'bookings' ? 'active' : ''}" onclick="window.PKL.adminTab('bookings')">Bookings${pendingBadge}</button>
                 <button class="tab ${tab === 'schedule' ? 'active' : ''}" onclick="window.PKL.adminTab('schedule')">Schedule</button>
                 <button class="tab ${tab === 'overrides' ? 'active' : ''}" onclick="window.PKL.adminTab('overrides')">Overrides</button>
+                <button class="tab ${tab === 'openplay' ? 'active' : ''}" onclick="window.PKL.adminTab('openplay')">Open Play</button>
                 <button class="tab ${tab === 'players' ? 'active' : ''}" onclick="window.PKL.adminTab('players')">Players</button>
                 <button class="tab ${tab === 'reports' ? 'active' : ''}" onclick="window.PKL.adminTab('reports')">Reports</button>
             </div>
@@ -1635,6 +1767,7 @@
         if (tab === 'bookings') renderAdminBookings(content);
         else if (tab === 'schedule') renderAdminSchedule(content);
         else if (tab === 'overrides') renderAdminOverrides(content);
+        else if (tab === 'openplay') renderAdminOpenPlay(content);
         else if (tab === 'players') renderAdminPlayers(content);
         else if (tab === 'reports') renderAdminReports(content);
     }
@@ -1858,6 +1991,100 @@
         if (hours.length === 0) {
             html += `<div class="empty-state card mt-2"><div class="empty-icon">&#128197;</div><h3>No Operating Hours</h3><p>This day has no scheduled operating hours.</p></div>`;
         }
+
+        content.innerHTML = html;
+    }
+
+    function renderAdminOpenPlay(content) {
+        var events = Data.getOpenPlay().slice().sort(function (a, b) {
+            return b.eventDate.localeCompare(a.eventDate);
+        });
+        var editing = State.admin.editingOpenPlay;
+        var e = editing || {};
+        var today = todayStr();
+
+        function val(v) { return v === null || v === undefined ? '' : escapeAttr(v); }
+
+        var html = '<div class="card mb-3">' +
+            '<div class="card-header">' + (editing && editing.id ? 'Edit Open Play' : 'New Open Play') + '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label class="required">Title</label>' +
+                    '<input type="text" class="form-control" id="opTitle" value="' + val(e.title) + '" placeholder="All Levels - Curated Open Play"></div>' +
+                '<div class="form-group"><label class="required">Date</label>' +
+                    '<input type="date" class="form-control" id="opDate" value="' + val(e.eventDate) + '" min="' + today + '"></div>' +
+            '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label>Start time</label>' +
+                    '<input type="text" class="form-control" id="opStart" value="' + val(e.startTime) + '" placeholder="6:00 PM"></div>' +
+                '<div class="form-group"><label>End time</label>' +
+                    '<input type="text" class="form-control" id="opEnd" value="' + val(e.endTime) + '" placeholder="10:00 PM"></div>' +
+            '</div>' +
+            '<div class="form-group"><label>Venue</label>' +
+                '<input type="text" class="form-control" id="opVenue" value="' + val(e.venue) + '" placeholder="Kepler Insight School (Ma\'am Songcal\'s Court)"></div>' +
+            '<div class="form-group"><label>Address</label>' +
+                '<input type="text" class="form-control" id="opAddress" value="' + val(e.address) + '" placeholder="295 Beatriz Village, Danao, 6004 Cebu"></div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label>Max players</label>' +
+                    '<input type="number" class="form-control" id="opPlayers" value="' + val(e.maxPlayers) + '" placeholder="12" min="1"></div>' +
+                '<div class="form-group"><label>Courts</label>' +
+                    '<input type="number" class="form-control" id="opCourts" value="' + val(e.courts) + '" placeholder="1" min="1"></div>' +
+            '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label>Price per player</label>' +
+                    '<input type="number" class="form-control" id="opPrice" value="' + val(e.price) + '" placeholder="140" min="0"></div>' +
+                '<div class="form-group"><label>Join link</label>' +
+                    '<input type="url" class="form-control" id="opJoinUrl" value="' + val(e.joinUrl) + '" placeholder="https://reclub.co/..."></div>' +
+            '</div>' +
+            '<div class="form-row">' +
+                '<div class="form-group"><label>GCash number</label>' +
+                    '<input type="text" class="form-control" id="opPayNumber" value="' + val(e.paymentNumber) + '" placeholder="09323054022"></div>' +
+                '<div class="form-group"><label>GCash name</label>' +
+                    '<input type="text" class="form-control" id="opPayName" value="' + val(e.paymentName) + '" placeholder="PR••Z CH••••V C."></div>' +
+            '</div>' +
+            '<div class="form-group"><label>Details</label>' +
+                '<textarea class="form-control" id="opDetails" rows="8" placeholder="Game details, rules, how to join, cancellation policy...">' + escapeHtml(e.details || '') + '</textarea>' +
+                '<small class="text-muted" style="font-size:12px;">Line breaks are preserved. Shown on the home page under the booking grid.</small></div>' +
+            '<div style="display:flex; gap:18px; flex-wrap:wrap; margin-bottom:16px;">' +
+                '<label style="display:flex; align-items:center; gap:8px; font-size:14px;">' +
+                    '<input type="checkbox" id="opActive"' + (editing && e.active === false ? '' : ' checked') + '> Visible on site</label>' +
+                '<label style="display:flex; align-items:center; gap:8px; font-size:14px;">' +
+                    '<input type="checkbox" id="opPopup"' + (editing && e.showPopup === false ? '' : ' checked') + '> Show as popup</label>' +
+            '</div>' +
+            '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+                '<button class="btn btn-primary" onclick="window.PKL.saveOpenPlay()">' + (editing && editing.id ? 'Save Changes' : 'Create Open Play') + '</button>' +
+                (editing && editing.id ? '<button class="btn btn-outline" onclick="window.PKL.cancelEditOpenPlay()">Cancel</button>' : '') +
+            '</div>' +
+        '</div>';
+
+        html += '<div class="card"><div class="card-header">Open Play Events (' + events.length + ')</div>';
+        if (events.length === 0) {
+            html += '<p class="text-muted text-center" style="padding:24px;">None yet. Create one above.</p>';
+        } else {
+            html += '<div class="table-container"><table>' +
+                '<thead><tr><th>Date</th><th>Title</th><th>Time</th><th>Players</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>';
+            events.forEach(function (ev) {
+                var past = ev.eventDate < today;
+                html += '<tr>' +
+                    '<td>' + formatDate(ev.eventDate) + (past ? ' <span class="badge badge-info">Past</span>' : '') + '</td>' +
+                    '<td><strong>' + escapeHtml(ev.title) + '</strong></td>' +
+                    '<td>' + escapeHtml([ev.startTime, ev.endTime].filter(Boolean).join(' - ')) + '</td>' +
+                    '<td>' + (ev.maxPlayers || '-') + '</td>' +
+                    '<td>' + (ev.price !== null && ev.price !== undefined ? formatCurrency(ev.price) : '-') + '</td>' +
+                    '<td>' + (ev.active
+                        ? '<span class="badge badge-success">Visible</span>'
+                        : '<span class="badge badge-danger">Hidden</span>') +
+                        (ev.showPopup ? ' <span class="badge badge-warning">Popup</span>' : '') + '</td>' +
+                    '<td>' +
+                        '<button class="btn btn-outline btn-sm" onclick="window.PKL.editOpenPlay(\'' + ev.id + '\')">Edit</button> ' +
+                        '<button class="btn btn-outline btn-sm" onclick="window.PKL.toggleOpenPlayActive(\'' + ev.id + '\')" style="margin-left:4px;">' +
+                            (ev.active ? 'Hide' : 'Show') + '</button> ' +
+                        '<button class="btn btn-danger btn-sm" onclick="window.PKL.deleteOpenPlay(\'' + ev.id + '\')" style="margin-left:4px;">Delete</button>' +
+                    '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+        html += '</div>';
 
         content.innerHTML = html;
     }
@@ -2520,6 +2747,105 @@
             });
         },
 
+        // Open play (admin)
+        _readOpenPlayForm() {
+            function v(id) {
+                var el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            }
+            function chk(id) {
+                var el = document.getElementById(id);
+                return el ? el.checked : true;
+            }
+            return {
+                title: v('opTitle'),
+                eventDate: v('opDate'),
+                startTime: v('opStart'),
+                endTime: v('opEnd'),
+                venue: v('opVenue'),
+                address: v('opAddress'),
+                maxPlayers: v('opPlayers'),
+                courts: v('opCourts'),
+                price: v('opPrice'),
+                joinUrl: v('opJoinUrl'),
+                paymentNumber: v('opPayNumber'),
+                paymentName: v('opPayName'),
+                details: v('opDetails'),
+                active: chk('opActive'),
+                showPopup: chk('opPopup')
+            };
+        },
+
+        async saveOpenPlay() {
+            var data = this._readOpenPlayForm();
+            if (!data.title || !data.eventDate) {
+                UI.toast('Title and date are required', 'error');
+                return;
+            }
+            var editing = State.admin.editingOpenPlay;
+            try {
+                if (editing && editing.id) {
+                    await Data.updateOpenPlay(editing.id, data);
+                    UI.toast('Open play updated', 'success');
+                } else {
+                    await Data.addOpenPlay(data);
+                    UI.toast('Open play created', 'success');
+                }
+                State.admin.editingOpenPlay = null;
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminOpenPlay(content);
+            } catch (err) {
+                UI.toast('Could not save open play', 'error');
+                console.error('Open play save error:', err);
+            }
+        },
+
+        editOpenPlay(id) {
+            State.admin.editingOpenPlay = Data.getOpenPlay().find(function (e) { return e.id === id; }) || null;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminOpenPlay(content);
+            window.scrollTo(0, 0);
+        },
+
+        cancelEditOpenPlay() {
+            State.admin.editingOpenPlay = null;
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminOpenPlay(content);
+        },
+
+        async toggleOpenPlayActive(id) {
+            var ev = Data.getOpenPlay().find(function (e) { return e.id === id; });
+            if (!ev) return;
+            try {
+                await Data.updateOpenPlay(id, { active: !ev.active });
+                var content = document.getElementById('adminTabContent');
+                if (content) renderAdminOpenPlay(content);
+            } catch (err) {
+                UI.toast('Could not update', 'error');
+            }
+        },
+
+        deleteOpenPlay(id) {
+            var ev = Data.getOpenPlay().find(function (e) { return e.id === id; });
+            UI.showModal('Delete Open Play?',
+                '<p>Delete <strong>' + escapeHtml(ev ? ev.title : '') + '</strong>? This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-danger" onclick="window.PKL.confirmDeleteOpenPlay(\'' + id + '\')">Delete</button>'
+            );
+        },
+
+        async confirmDeleteOpenPlay(id) {
+            UI.closeModal();
+            try {
+                await Data.deleteOpenPlay(id);
+                UI.toast('Open play deleted', 'info');
+            } catch (err) {
+                UI.toast('Could not delete', 'error');
+            }
+            var content = document.getElementById('adminTabContent');
+            if (content) renderAdminOpenPlay(content);
+        },
+
         // Copies verbatim. Codes like O737V would lose their letters above.
         copyPlain(text, msg) {
             navigator.clipboard.writeText(text).then(function() {
@@ -2544,6 +2870,7 @@
             if (tab === 'bookings') renderAdminBookings(content);
             else if (tab === 'schedule') renderAdminSchedule(content);
             else if (tab === 'overrides') renderAdminOverrides(content);
+        else if (tab === 'openplay') renderAdminOpenPlay(content);
             else if (tab === 'players') renderAdminPlayers(content);
             else if (tab === 'reports') renderAdminReports(content);
         },
@@ -3109,6 +3436,13 @@
         // Route handling
         window.addEventListener('hashchange', handleRoute);
         handleRoute();
+
+        // After the first render so it overlays a drawn page, and only on the
+        // home page — it should not interrupt checkout or the admin panel.
+        var landing = (location.hash.slice(1) || 'home').split('/')[0];
+        if (landing === 'home' || landing === 'book') {
+            maybeShowOpenPlayPopup();
+        }
 
         // Auto-refresh every 30 seconds for multi-device sync (data only, no re-render)
         setInterval(function() {
