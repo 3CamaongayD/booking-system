@@ -12,6 +12,13 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const { id } = req.query;
       if (id) {
+        // Single-reservation reads carry the payment receipt, so they are
+        // admin-only. Ids are published by the list below, and checkout falls
+        // back to inline base64 when storage is down, so an unauthenticated
+        // read here could hand out a payment screenshot.
+        if (!checkAdmin(req)) {
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
         const rows = await sql`SELECT * FROM reservations WHERE id = ${id}`;
         if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
         return res.status(200).json(formatRow(rows[0], true));

@@ -46,6 +46,12 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PUT') {
+      // Player ids are published by the list above, so an open PUT would let
+      // anyone rewrite any player's name and phone. Checkout upserts through
+      // POST instead, so nothing public needs this.
+      if (!checkAdmin(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const { id, fullName, contactNumber } = req.body;
       if (!id) return res.status(400).json({ error: 'Missing id' });
       await sql`

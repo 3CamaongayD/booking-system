@@ -369,13 +369,6 @@
             return player;
         },
         getPlayer(id) { return this._players.find(function(p) { return p.id === id; }); },
-        async updatePlayer(id, data) {
-            var idx = this._players.findIndex(function(p) { return p.id === id; });
-            if (idx >= 0) {
-                Object.assign(this._players[idx], data);
-                await this._api('players', 'PUT', { id: id, fullName: data.fullName || this._players[idx].fullName, contactNumber: data.contactNumber || this._players[idx].contactNumber });
-            }
-        },
 
         getReservations() { return this._reservations; },
         async addReservation(r) {

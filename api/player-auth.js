@@ -60,7 +60,10 @@ module.exports = async (req, res) => {
     if (code) {
       const rows = await sql`SELECT code, expires_at, attempts FROM login_codes WHERE email = ${email}`;
       const row = rows[0];
-      if (!row) return res.status(401).json({ error: 'No code requested for this email' });
+      // Same wording as a wrong code. Saying "no code was requested" here
+      // would reveal which addresses are registered, undoing the deliberate
+      // always-report-success behaviour of the request step below.
+      if (!row) return res.status(401).json({ error: 'Incorrect or expired code' });
 
       if (row.attempts >= MAX_ATTEMPTS) {
         await sql`DELETE FROM login_codes WHERE email = ${email}`;
@@ -68,7 +71,7 @@ module.exports = async (req, res) => {
       }
       if (new Date(row.expires_at).getTime() < Date.now()) {
         await sql`DELETE FROM login_codes WHERE email = ${email}`;
-        return res.status(401).json({ error: 'Code expired. Request a new one.' });
+        return res.status(401).json({ error: 'Incorrect or expired code' });
       }
 
       const submitted = Buffer.from(code);
@@ -76,7 +79,7 @@ module.exports = async (req, res) => {
       const match = submitted.length === expected.length && crypto.timingSafeEqual(submitted, expected);
       if (!match) {
         await sql`UPDATE login_codes SET attempts = attempts + 1 WHERE email = ${email}`;
-        return res.status(401).json({ error: 'Incorrect code' });
+        return res.status(401).json({ error: 'Incorrect or expired code' });
       }
 
       await sql`DELETE FROM login_codes WHERE email = ${email}`;

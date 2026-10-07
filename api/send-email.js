@@ -4,6 +4,18 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Kepler Insight Booking <booking@keplerinsightschool.com>';
 const ADMIN_EMAILS = ['booking@keplerinsightschool.com', 'docamaongay9@gmail.com'];
 
+const COURT_NAMES = { 1: 'Court 1', 2: 'Court 2', 3: 'Court 3', 4: 'Table 1', 5: 'Table 2' };
+
+// Everything rendered into an email comes from the database, but escape
+// anyway: a player's own name is the one field they control.
+function esc(v) {
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 const COURT_RULES = [
   { icon: '🚭', title: 'No Smoking', desc: 'Smoking and vaping are strictly prohibited in all court areas and facilities.' },
   { icon: '🍸', title: 'No Alcoholic Beverages', desc: 'Alcohol is not allowed on the premises.' },
@@ -220,7 +232,9 @@ function rejectedEmailHtml(data) {
   `;
 }
 
-const { setCors } = require('./_auth');
+const { getDb } = require('./db');
+const { setCors, checkAdmin, clientIp } = require('./_auth');
+const { allow } = require('./_ratelimit');
 
 module.exports = async (req, res) => {
   setCors(req, res);
@@ -234,10 +248,55 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { type, data } = req.body;
+    const type = (req.body || {}).type;
+    const code = String(((req.body || {}).data || {}).confirmationCode || '').trim();
 
-    if (!data || !data.playerEmail || !data.confirmationCode) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!code) {
+      return res.status(400).json({ error: 'Missing confirmation code' });
+    }
+    if (!['pending', 'confirmed', 'rejected'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid email type' });
+    }
+
+    // Approval and rejection notices are admin actions. "pending" fires right
+    // after a public checkout, so it stays open but is throttled per IP.
+    const sql = getDb();
+    if (type !== 'pending') {
+      if (!checkAdmin(req)) return res.status(401).json({ error: 'Unauthorized' });
+    } else if (!checkAdmin(req)) {
+      const ok = await allow(sql, 'send-email-ip:' + clientIp(req), 30, 60);
+      if (!ok) return res.status(429).json({ error: 'Too many requests' });
+    }
+
+    // The recipient and every rendered value are read from the database, never
+    // from the request. Otherwise this endpoint is an open relay: anyone could
+    // send arbitrary content to any address from our verified domain.
+    const rows = await sql`
+      SELECT r.confirmation_code, r.court_id, r.sport, r.date, r.slots,
+             r.total_amount, r.payment_method,
+             p.full_name, p.email
+      FROM reservations r
+      JOIN players p ON p.id = r.player_id
+      WHERE r.confirmation_code = ${code}
+    `;
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    const row = rows[0];
+
+    const data = {
+      confirmationCode: esc(row.confirmation_code),
+      playerName: esc(row.full_name),
+      playerEmail: row.email,
+      courtName: COURT_NAMES[row.court_id] || ('Court ' + row.court_id),
+      sport: row.sport,
+      date: row.date,
+      slots: typeof row.slots === 'string' ? JSON.parse(row.slots) : (row.slots || []),
+      totalAmount: Number(row.total_amount),
+      paymentMethod: esc(row.payment_method)
+    };
+    if (!Array.isArray(data.slots) || data.slots.length === 0) {
+      return res.status(400).json({ error: 'Booking has no slots' });
     }
 
     let subject, html;
