@@ -637,7 +637,7 @@
         var dateLabelShort = isToday ? 'Today, ' + formatDateShort(dateStr) : formatDateShort(dateStr);
         html += '<div class="book-date-nav">';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(-1)">Previous</button>';
-        html += '<div class="book-date-label">&#128197; <span class="date-full">' + dateLabel + '</span><span class="date-short">' + dateLabelShort + '</span></div>';
+        html += '<div class="book-date-label"><span class="date-full">' + dateLabel + '</span><span class="date-short">' + dateLabelShort + '</span></div>';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateNav(1)">Next</button>';
         html += '<button class="btn btn-outline btn-sm" onclick="window.PKL.bookingDateReset()" title="Go to today">Today</button>';
         html += '</div>';
@@ -820,7 +820,7 @@
 
         var html = '<div class="op-section">';
         html += '<div class="op-section-head">' +
-            '<h3>&#128293; Open Play</h3>' +
+            '<h3>Open Play</h3>' +
             '<p>Organized sessions &mdash; separate from booking a court above.</p>' +
         '</div>';
         html += events.map(function (e) { return openPlayCard(e, false); }).join('');
@@ -835,9 +835,8 @@
         if (events.length === 0) return;
 
         sessionStorage.setItem('pkl_openPlaySeen', '1');
-        // Literal emoji, not an entity: showModal escapes the title.
         UI.showModal(
-            '🔥 Open Play',
+            'Open Play',
             '<p class="text-muted" style="font-size:13px;margin-bottom:12px;">Upcoming session at Kepler Insight</p>' +
                 openPlayCard(events[0], true),
             '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Maybe later</button>' +
