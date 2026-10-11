@@ -274,14 +274,27 @@
                 paymentMethod: reservation.paymentMethod
             }
         };
+        // Confirmed and rejected notices are admin-only server-side, so the
+        // session token has to ride along. This is a raw fetch rather than
+        // Data._api because it is fire-and-forget and must not throw.
+        var headers = { 'Content-Type': 'application/json' };
+        var token = sessionStorage.getItem('pkl_adminToken');
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
         fetch('/api/send-email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify(payload)
         }).then(function(resp) {
-            if (!resp.ok) console.error('Email API error:', resp.status);
+            if (!resp.ok) {
+                console.error('Email API error:', resp.status);
+                // Surface it: a silently failing email looks identical to a
+                // working one, which is how this went unnoticed.
+                UI.toast('Booking saved, but the email could not be sent', 'warning');
+            }
         }).catch(function(err) {
             console.error('Email send failed:', err);
+            UI.toast('Booking saved, but the email could not be sent', 'warning');
         });
     }
 
