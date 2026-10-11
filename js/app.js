@@ -258,6 +258,52 @@
         }
     }
 
+    // Awaitable counterpart to sendBookingEmail, for flows that need to report
+    // success or failure per booking. The server reads the recipient and all
+    // content from the database, so only the code and type are sent.
+    async function sendBookingEmailAsync(type, reservation) {
+        var headers = { 'Content-Type': 'application/json' };
+        var token = sessionStorage.getItem('pkl_adminToken');
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        var resp = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                type: type,
+                data: { confirmationCode: reservation.confirmationCode }
+            })
+        });
+        if (!resp.ok) {
+            var body = await resp.json().catch(function () { return {}; });
+            throw new Error(body.error || ('HTTP ' + resp.status));
+        }
+        return resp.json().catch(function () { return {}; });
+    }
+
+    // The paid subset of whatever the Bookings filters currently show.
+    function currentFilteredPaidBookings() {
+        var f = State.admin.bookingFilter;
+        return Data.getReservations().filter(function (r) {
+            if (r.paymentStatus !== 'paid') return false;
+            if (f.status !== 'all' && r.paymentStatus !== f.status) return false;
+            if (f.from && r.date < f.from) return false;
+            if (f.to && r.date > f.to) return false;
+            if (f.q) {
+                var player = Data.getPlayer(r.playerId);
+                var hay = [
+                    r.confirmationCode,
+                    player ? player.fullName : '',
+                    getCourtName(r.courtId),
+                    r.date,
+                    r.paymentMethod
+                ].join(' ').toLowerCase();
+                if (hay.indexOf(f.q.toLowerCase()) < 0) return false;
+            }
+            return true;
+        }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+    }
+
     function sendBookingEmail(type, reservation, playerName, playerEmail) {
         var courtConfig = getCourtConfig(reservation.courtId);
         var payload = {
@@ -1884,7 +1930,11 @@
                       + '<button class="btn btn-danger btn-sm" onclick="window.PKL.rejectBooking(\'' + r.id + '\')" style="margin-left:4px;">Reject</button> '
                       + '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')" style="margin-left:4px;">Receipt</button>'
                     : '<button class="btn btn-outline btn-sm" onclick="window.PKL.viewReceipt(\'' + r.id + '\')">View</button>'
-                ) + ' <button class="btn btn-outline btn-sm" onclick="window.PKL.deleteBooking(\'' + r.id + '\')" style="margin-left:4px;color:var(--gray-400);">Delete</button></td>' +
+                ) +
+                (r.paymentStatus === 'paid'
+                    ? ' <button class="btn btn-outline btn-sm" onclick="window.PKL.resendConfirmation(\'' + r.id + '\')" style="margin-left:4px;">Resend Email</button>'
+                    : '') +
+                ' <button class="btn btn-outline btn-sm" onclick="window.PKL.deleteBooking(\'' + r.id + '\')" style="margin-left:4px;color:var(--gray-400);">Delete</button></td>' +
             '</tr>';
         }
 
@@ -1935,7 +1985,12 @@
             </div>
 
             <div class="card">
-                <div class="card-header">All Bookings (${filtered.length}${filtersActive ? ' of ' + allRes.length : ''})</div>
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <span>All Bookings (${filtered.length}${filtersActive ? ' of ' + allRes.length : ''})</span>
+                    ${filtersActive && filtered.filter(r => r.paymentStatus === 'paid').length > 0
+                        ? `<button class="btn btn-outline btn-sm" onclick="window.PKL.bulkResendConfirmations()">Resend Confirmation to ${filtered.filter(r => r.paymentStatus === 'paid').length} shown</button>`
+                        : ''}
+                </div>
 
                 <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">
                     <div style="flex:1; min-width:180px;">
@@ -3010,6 +3065,80 @@
             }).catch(function() {
                 UI.toast('Could not copy', 'error');
             });
+        },
+
+        // Resending confirmations (admin). Sends outbound mail to real
+        // customers, so both paths confirm first and report per-booking
+        // failures rather than a blanket success.
+        resendConfirmation(id) {
+            var res = Data.getReservations().find(function (r) { return r.id === id; });
+            if (!res) return;
+            var player = Data.getPlayer(res.playerId);
+            UI.showModal('Resend Confirmation?',
+                '<p>Send the confirmation email for <strong>' + escapeHtml(res.confirmationCode) + '</strong>' +
+                (player ? ' to <strong>' + escapeHtml(player.fullName) + '</strong>' : '') + '?</p>' +
+                '<p class="text-muted" style="font-size:13px;">They will receive it again if they already have it.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-primary" onclick="window.PKL.confirmResend(\'' + id + '\')">Send</button>'
+            );
+        },
+
+        async confirmResend(id) {
+            UI.closeModal();
+            var res = Data.getReservations().find(function (r) { return r.id === id; });
+            if (!res) return;
+            UI.showProcessing('Sending...');
+            try {
+                await sendBookingEmailAsync('confirmed', res);
+                UI.toast('Confirmation sent', 'success');
+            } catch (err) {
+                UI.toast('Could not send: ' + (err && err.message ? err.message : 'unknown error'), 'error');
+            } finally {
+                UI.hideProcessing();
+            }
+        },
+
+        bulkResendConfirmations() {
+            var list = State.admin._resendQueue = currentFilteredPaidBookings();
+            if (list.length === 0) return;
+            var names = {};
+            list.forEach(function (r) {
+                var p = Data.getPlayer(r.playerId);
+                if (p) names[p.id] = p.fullName;
+            });
+            var people = Object.keys(names).length;
+            UI.showModal('Resend ' + list.length + ' Confirmation' + (list.length > 1 ? 's' : '') + '?',
+                '<p>This emails <strong>' + list.length + ' booking' + (list.length > 1 ? 's' : '') +
+                '</strong> across <strong>' + people + ' player' + (people > 1 ? 's' : '') + '</strong>.</p>' +
+                '<p class="text-muted" style="font-size:13px;">Anyone who already received theirs will get a duplicate. This cannot be undone.</p>',
+                '<button class="btn btn-outline" onclick="window.PKL.closeModal()">Cancel</button>' +
+                '<button class="btn btn-primary" onclick="window.PKL.confirmBulkResend()">Send All</button>'
+            );
+        },
+
+        async confirmBulkResend() {
+            var list = (State.admin._resendQueue || []).slice();
+            UI.closeModal();
+            if (list.length === 0) return;
+            var ok = 0, failed = 0;
+            for (var i = 0; i < list.length; i++) {
+                UI.showProcessing('Sending ' + (i + 1) + ' of ' + list.length + '...');
+                try {
+                    await sendBookingEmailAsync('confirmed', list[i]);
+                    ok++;
+                } catch (err) {
+                    failed++;
+                    console.error('Resend failed for', list[i].confirmationCode, err);
+                }
+            }
+            UI.hideProcessing();
+            State.admin._resendQueue = null;
+            UI.toast(
+                failed === 0
+                    ? 'Sent ' + ok + ' confirmation' + (ok > 1 ? 's' : '')
+                    : 'Sent ' + ok + ', failed ' + failed + ' (see console)',
+                failed === 0 ? 'success' : 'warning'
+            );
         },
 
         // Expenses (admin)
